@@ -1,0 +1,88 @@
+# 实验四 Docker Swarm 部署文件（stack 名 lab4），在 Swarm manager（CDWY1）上执行：
+#   set -a; . /root/.config/lab4/deploy.env; set +a
+#   docker stack deploy --resolve-image never -c lab4-stack.yml lab4
+# deploy.env 只放镜像名等非敏感参数；密码全部放在 Docker secret 中（见 deploy/scripts/init-secrets.sh）。
+#
+# 服务与指导书服务器对应关系：
+#   mongo    → 服务器 C（CDWY5，节点标签 lab4_role=mongo）
+#   logjpa   → 服务器 E（CDWY1，节点标签 lab3_role=app），MySQL 版日志服务，端口 8081
+#   logmongo → 服务器 E（CDWY1），MongoDB 版日志服务，端口 8082
+# MySQL（服务器 B，CDWY2）沿用实验三 stack lab 中的 lab_mysql；Prometheus（服务器 D，CDWY4）沿用 lab_prometheus。
+version: "3.9"
+
+services:
+  mongo:
+    image: ${MONGO_IMAGE:?set MONGO_IMAGE in deploy.env}
+    networks: [javaee-proxy]
+    # 不发布端口：只允许 overlay 网络内的日志服务访问，数据库不暴露到公网
+    command:
+      - mongod
+      - --auth
+      - --bind_ip_all
+      # WiredTiger 缓存与 MySQL innodb_buffer_pool_size 设为相同大小，见 docs
+      - --wiredTigerCacheSizeGB
+      - "${MONGO_CACHE_GB:-0.5}"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/lab4_mongo_root_password
+    secrets:
+      - lab4_mongo_root_password
+    volumes:
+      - /root/lab4/mongo/data:/data/db
+      - /root/lab4/mongo/import:/import
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.lab4_role == mongo]
+      restart_policy: {condition: on-failure, delay: 10s}
+
+  logjpa:
+    image: ${JPA_IMAGE:?set JPA_IMAGE in deploy.env}
+    networks: [javaee-proxy]
+    # host 模式直接在 CDWY1 上监听，压测请求不经过 Swarm ingress 负载均衡
+    ports:
+      - {target: 8080, published: 8081, protocol: tcp, mode: host}
+    secrets:
+      - {source: lab4_jpa_properties_v1, target: lab4-jpa.properties}
+    environment:
+      JAVA_TOOL_OPTIONS: ${APP_JAVA_OPTS:--Xms384m -Xmx384m -Xss512k -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m}
+      TZ: Asia/Shanghai
+      MYSQL_HOST: lab_mysql
+      MYSQL_DATABASE: lab4_log
+    command:
+      - --spring.config.additional-location=file:/run/secrets/lab4-jpa.properties
+    deploy:
+      replicas: ${JPA_REPLICAS:-1}
+      placement:
+        constraints: [node.labels.lab3_role == app]
+      resources:
+        limits: {memory: 768M}
+      restart_policy: {condition: on-failure, delay: 10s}
+
+  logmongo:
+    image: ${MONGO_APP_IMAGE:?set MONGO_APP_IMAGE in deploy.env}
+    networks: [javaee-proxy]
+    ports:
+      - {target: 8080, published: 8082, protocol: tcp, mode: host}
+    secrets:
+      - {source: lab4_mongo_properties_v1, target: lab4-mongo.properties}
+    environment:
+      JAVA_TOOL_OPTIONS: ${APP_JAVA_OPTS:--Xms384m -Xmx384m -Xss512k -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m}
+      TZ: Asia/Shanghai
+    command:
+      - --spring.config.additional-location=file:/run/secrets/lab4-mongo.properties
+    deploy:
+      replicas: ${MONGO_APP_REPLICAS:-1}
+      placement:
+        constraints: [node.labels.lab3_role == app]
+      resources:
+        limits: {memory: 768M}
+      restart_policy: {condition: on-failure, delay: 10s}
+
+networks:
+  javaee-proxy: {external: true}
+
+secrets:
+  lab4_mongo_root_password: {external: true}
+  lab4_jpa_properties_v1: {external: true}
+  lab4_mongo_properties_v1: {external: true}
