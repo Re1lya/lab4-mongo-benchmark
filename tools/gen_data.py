@@ -10,8 +10,8 @@
 这两个函数在各 Python 3 版本中输出一致，因此不同机器生成的文件逐字节相同。
 
 示例：
-  python3 gen_data.py seed --rows 1000000 --mysql-tsv seed.tsv           # MySQL 服务器上
-  python3 gen_data.py seed --rows 1000000 --mongo-jsonl seed.jsonl       # MongoDB 服务器上
+  python3 gen_data.py seed --mysql-tsv seed.tsv        # MySQL 服务器上（默认 10 万条）
+  python3 gen_data.py seed --mongo-jsonl seed.jsonl    # MongoDB 服务器上
   python3 gen_data.py jmeter --out ../jmeter/data
 """
 import argparse
@@ -51,8 +51,9 @@ WORDS = [
 ]
 
 DEFAULT_SEED = 20261115
-DEFAULT_START = "2026-10-01T00:00:00Z"
-DEFAULT_DAYS = 31
+DEFAULT_START = "2026-10-27T00:00:00Z"
+DEFAULT_DAYS = 5
+DEFAULT_ROWS = 100000  # 10 万条：MySQL 约 80MB、Mongo 约 85MB，128MB/256MB 缓存都能完整容纳
 
 
 def parse_utc(text):
@@ -199,7 +200,7 @@ def cmd_jmeter(args):
     rng = random.Random(args.seed + 2)
     start = parse_utc(args.start)
     span_s = args.days * 24 * 3600
-    windows = [(3600, 0.40), (6 * 3600, 0.30), (24 * 3600, 0.20), (7 * 24 * 3600, 0.10)]
+    windows = [(3600, 0.40), (6 * 3600, 0.30), (24 * 3600, 0.20), (72 * 3600, 0.10)]
     read_path = os.path.join(args.out, "read-queries.tsv")
     with open(read_path, "w", encoding="utf-8", newline="\n") as f:
         f.write("level\tfrom\tto\tpage\n")
@@ -227,7 +228,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd")
     p = sub.add_parser("seed", help="生成预置日志数据集")
-    p.add_argument("--rows", type=int, default=1000000)
+    p.add_argument("--rows", type=int, default=DEFAULT_ROWS)
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)
     p.add_argument("--start", default=DEFAULT_START, help="时间窗口起点（UTC）")
     p.add_argument("--days", type=int, default=DEFAULT_DAYS)

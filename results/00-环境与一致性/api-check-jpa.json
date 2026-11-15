@@ -1,0 +1,572 @@
+{
+  "name": "jpa",
+  "base": "http://172.31.1.202:8081",
+  "window": [
+    "2036-01-01T00:00:00.000Z",
+    "2036-01-01T01:00:00.000Z"
+  ],
+  "passed": 22,
+  "total": 22,
+  "results": [
+    {
+      "check": "写入：合法日志，+08:00 时间换算为 UTC 毫秒",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "level": "INFO",
+          "source": "api-check",
+          "message": "接口检查 hello",
+          "clientIp": "10.0.0.1",
+          "createdAt": "2036-01-01T08:00:00.123456+08:00"
+        }
+      },
+      "status": 201,
+      "errno": 1,
+      "errmsg": "创建成功",
+      "pass": true,
+      "detail": {
+        "idLength": 26,
+        "sent": "2036-01-01T08:00:00.123456+08:00",
+        "createdAt": "2036-01-01T00:00:00.123Z"
+      },
+      "data": null
+    },
+    {
+      "check": "写入：缺少 level",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "api-check",
+          "message": "接口检查 hello",
+          "clientIp": "10.0.0.1"
+        }
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "level不能为空",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：level=FATAL 不在取值范围",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "level": "FATAL",
+          "source": "api-check",
+          "message": "接口检查 hello",
+          "clientIp": "10.0.0.1"
+        }
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "level只能是TRACE/DEBUG/INFO/WARN/ERROR",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：source 为空",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "level": "INFO",
+          "source": "",
+          "message": "接口检查 hello",
+          "clientIp": "10.0.0.1"
+        }
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "source不能为空",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：traceId 超过 64 字符",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "level": "INFO",
+          "source": "api-check",
+          "message": "接口检查 hello",
+          "clientIp": "10.0.0.1"
+        }
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "traceId长度不能超过64",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：clientIp 非法",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "level": "INFO",
+          "source": "api-check",
+          "message": "接口检查 hello",
+          "clientIp": "300.1.1.1"
+        }
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "clientIp不是合法的IPv4或IPv6地址",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：message 4097 个字符",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "level": "INFO",
+          "source": "api-check",
+          "message": "(4097 个字符)",
+          "clientIp": "10.0.0.1"
+        }
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "message长度不能超过4096个字符",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：请求体不是 JSON 对象",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": "not-json"
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "请求体不是合法的JSON日志对象",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：message 正好 4096 个字符（emoji）",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "level": "INFO",
+          "source": "api-check",
+          "message": "(4096 个字符)",
+          "clientIp": "10.0.0.1",
+          "createdAt": "2036-01-01T00:00:01.000Z"
+        }
+      },
+      "status": 201,
+      "errno": 1,
+      "errmsg": "创建成功",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：IPv6 地址（含嵌入 IPv4）",
+      "request": {
+        "method": "POST",
+        "path": "/api/logs",
+        "params": null,
+        "body": {
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "level": "INFO",
+          "source": "api-check",
+          "message": "接口检查 hello",
+          "clientIp": "2001:db8::ffff:192.168.1.1",
+          "createdAt": "2036-01-01T00:00:02.000Z"
+        }
+      },
+      "status": 201,
+      "errno": 1,
+      "errmsg": "创建成功",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "写入：准备 30 条查询数据",
+      "status": 201,
+      "errno": 1,
+      "pass": true
+    },
+    {
+      "check": "查询：WARN 第1页 size=4（时间倒序）",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "level": "WARN",
+          "from": "2036-01-01T00:00:00.000Z",
+          "to": "2036-01-01T01:00:00.000Z",
+          "page": 1,
+          "size": 4
+        },
+        "body": null
+      },
+      "status": 200,
+      "errno": 0,
+      "errmsg": "成功",
+      "pass": true,
+      "detail": {
+        "messages": [
+          "paging-27",
+          "paging-24",
+          "paging-21",
+          "paging-18"
+        ]
+      },
+      "data": {
+        "list": [
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "WARN",
+            "source": "api-check",
+            "message": "paging-27",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:27.027Z"
+          },
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "WARN",
+            "source": "api-check",
+            "message": "paging-24",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:24.024Z"
+          },
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "WARN",
+            "source": "api-check",
+            "message": "paging-21",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:21.021Z"
+          },
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "WARN",
+            "source": "api-check",
+            "message": "paging-18",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:18.018Z"
+          }
+        ],
+        "page": 1,
+        "pageSize": 4
+      }
+    },
+    {
+      "check": "查询：WARN 第3页 size=4（最后一页不足4条）",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "level": "WARN",
+          "from": "2036-01-01T00:00:00.000Z",
+          "to": "2036-01-01T01:00:00.000Z",
+          "page": 3,
+          "size": 4
+        },
+        "body": null
+      },
+      "status": 200,
+      "errno": 0,
+      "errmsg": "成功",
+      "pass": true,
+      "detail": {
+        "messages": [
+          "paging-03",
+          "paging-00"
+        ]
+      },
+      "data": {
+        "list": [
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "WARN",
+            "source": "api-check",
+            "message": "paging-03",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:03.003Z"
+          },
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "WARN",
+            "source": "api-check",
+            "message": "paging-00",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:00Z"
+          }
+        ],
+        "page": 3,
+        "pageSize": 4
+      }
+    },
+    {
+      "check": "查询：超出最后一页返回空列表",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "level": "WARN",
+          "from": "2036-01-01T00:00:00.000Z",
+          "to": "2036-01-01T01:00:00.000Z",
+          "page": 9,
+          "size": 4
+        },
+        "body": null
+      },
+      "status": 200,
+      "errno": 0,
+      "errmsg": "成功",
+      "pass": true,
+      "detail": {
+        "messages": []
+      },
+      "data": {
+        "list": [],
+        "page": 9,
+        "pageSize": 4
+      }
+    },
+    {
+      "check": "查询：时间范围 [from,to) 含 from、不含 to",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "level": "ERROR",
+          "from": "2036-01-01T00:10:01.001Z",
+          "to": "2036-01-01T00:10:07.007Z",
+          "page": 1,
+          "size": 10
+        },
+        "body": null
+      },
+      "status": 200,
+      "errno": 0,
+      "errmsg": "成功",
+      "pass": true,
+      "detail": {
+        "messages": [
+          "paging-04",
+          "paging-01"
+        ]
+      },
+      "data": {
+        "list": [
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "ERROR",
+            "source": "api-check",
+            "message": "paging-04",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:04.004Z"
+          },
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "ERROR",
+            "source": "api-check",
+            "message": "paging-01",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:01.001Z"
+          }
+        ],
+        "page": 1,
+        "pageSize": 10
+      }
+    },
+    {
+      "check": "查询：不指定 level 时查所有级别",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "from": "2036-01-01T00:10:00.000Z",
+          "to": "2036-01-01T00:10:03.003Z",
+          "page": 1,
+          "size": 10
+        },
+        "body": null
+      },
+      "status": 200,
+      "errno": 0,
+      "errmsg": "成功",
+      "pass": true,
+      "detail": {
+        "messages": [
+          "paging-02",
+          "paging-01",
+          "paging-00"
+        ]
+      },
+      "data": {
+        "list": [
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "INFO",
+            "source": "api-check",
+            "message": "paging-02",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:02.002Z"
+          },
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "ERROR",
+            "source": "api-check",
+            "message": "paging-01",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:01.001Z"
+          },
+          {
+            "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "level": "WARN",
+            "source": "api-check",
+            "message": "paging-00",
+            "clientIp": "10.0.0.1",
+            "createdAt": "2036-01-01T00:10:00Z"
+          }
+        ],
+        "page": 1,
+        "pageSize": 10
+      }
+    },
+    {
+      "check": "查询：level 非法",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "level": "FATAL"
+        },
+        "body": null
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "level只能是TRACE/DEBUG/INFO/WARN/ERROR",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "查询：from 格式错误",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "from": "2036/01/01"
+        },
+        "body": null
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "from必须是ISO-8601时间，例如2026-11-01T00:00:00Z",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "查询：from 不早于 to",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "from": "2036-01-01T01:00:00.000Z",
+          "to": "2036-01-01T00:00:00.000Z"
+        },
+        "body": null
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "from必须早于to",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "查询：page=0",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "page": 0
+        },
+        "body": null
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "page必须在1到10000之间",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "查询：size=101 超过上限",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "size": 101
+        },
+        "body": null
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "size必须在1到100之间",
+      "pass": true,
+      "detail": null,
+      "data": null
+    },
+    {
+      "check": "查询：page 不是数字",
+      "request": {
+        "method": "GET",
+        "path": "/api/logs",
+        "params": {
+          "page": "abc"
+        },
+        "body": null
+      },
+      "status": 400,
+      "errno": 3,
+      "errmsg": "page格式不正确",
+      "pass": true,
+      "detail": null,
+      "data": null
+    }
+  ]
+}

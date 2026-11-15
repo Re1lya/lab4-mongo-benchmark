@@ -1,0 +1,14 @@
+{
+  "format": "mongo",
+  "rows": 100000,
+  "levels": {
+    "DEBUG": 15074,
+    "ERROR": 5087,
+    "INFO": 60188,
+    "TRACE": 4920,
+    "WARN": 14731
+  },
+  "minCreatedAtMs": 1793059201299,
+  "maxCreatedAtMs": 1793491197675,
+  "sortedByIdSha256": "bbd96253ef096fee07f50500a26df3559b9aa23eebee36dea3f79f1ac25a5647"
+}

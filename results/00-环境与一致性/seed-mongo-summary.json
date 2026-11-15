@@ -1,0 +1,16 @@
+{
+  "rows": 100000,
+  "seed": 20261115,
+  "start": "2026-10-27T00:00:00Z",
+  "days": 5,
+  "firstCreatedAt": "2026-10-27T00:00:01.299Z",
+  "lastCreatedAt": "2026-10-31T23:59:57.675Z",
+  "levels": {
+    "DEBUG": 15074,
+    "ERROR": 5087,
+    "INFO": 60188,
+    "TRACE": 4920,
+    "WARN": 14731
+  },
+  "contentSha256": "bbd96253ef096fee07f50500a26df3559b9aa23eebee36dea3f79f1ac25a5647"
+}
