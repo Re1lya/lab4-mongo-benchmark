@@ -17,3 +17,7 @@ secrets/
 *.tsv.tmp
 seed*.tsv
 seed*.jsonl
+
+# Python 缓存
+__pycache__/
+*.pyc
