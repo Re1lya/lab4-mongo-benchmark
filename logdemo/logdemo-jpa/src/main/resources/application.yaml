@@ -1,0 +1,56 @@
+# 日志服务 MySQL 版。密码不写在这里：部署时由 Docker secret 中的私密配置文件提供
+# （--spring.config.additional-location=file:/run/secrets/lab4-jpa.properties）。
+server:
+  port: 8080
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
+
+spring:
+  application:
+    name: logdemo-jpa
+  datasource:
+    # connectionTimeZone=UTC + forceConnectionTimeZoneToSession：会话时区固定为 UTC，
+    # DATETIME(6) 中保存的就是 UTC 时间，与 MongoDB 的 BSON Date 一致。
+    # 两种实现都不启用 TLS（同一 VPC 内网），避免加密开销影响对比。
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:lab4_log}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=DISABLED&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:lab4app}
+    hikari:
+      # 连接池大小与 MongoDB 版相同（logdemo.pool.*），保证对比公平
+      maximum-pool-size: ${logdemo.pool.max-size}
+      minimum-idle: ${logdemo.pool.max-size}
+      connection-timeout: ${logdemo.pool.wait-timeout-ms}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 表结构由 db/mysql/01-schema.sql 创建，程序不自动建表
+      ddl-auto: none
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+logdemo:
+  pool:
+    max-size: 100
+    wait-timeout-ms: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      impl: jpa
+    distribution:
+      # 生成直方图桶，Prometheus 可以用 histogram_quantile 计算 P95/P99
+      percentiles-histogram:
+        http.server.requests: true
+
+logging:
+  level:
+    root: INFO

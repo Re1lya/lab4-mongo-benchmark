@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 与课程仓库 6.SpringData_Mongo 使用同一 Spring Boot 版本 -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>cn.edu.xmu.javaee</groupId>
+    <artifactId>logdemo</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>logdemo</name>
+    <description>实验四：同一套日志接口的 JPA/MySQL 与 Spring Data MongoDB/MongoDB 两种实现</description>
+
+    <modules>
+        <!-- 共享部分：接口、业务模型、校验、ULID -->
+        <module>logdemo-core</module>
+        <!-- 实现一：Spring Data JPA + MySQL -->
+        <module>logdemo-jpa</module>
+        <!-- 实现二：Spring Data MongoDB + MongoDB -->
+        <module>logdemo-mongo</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>cn.edu.xmu.javaee</groupId>
+                <artifactId>logdemo-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- 与课程仓库相同：优先使用国内镜像，服务器上编译更快 -->
+    <repositories>
+        <repository>
+            <id>huaweicloud</id>
+            <url>https://repo.huaweicloud.com/repository/maven/</url>
+        </repository>
+        <repository>
+            <id>aliyun-public</id>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>huaweicloud</id>
+            <url>https://repo.huaweicloud.com/repository/maven/</url>
+        </pluginRepository>
+        <pluginRepository>
+            <id>aliyun-public</id>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </pluginRepository>
+    </pluginRepositories>
+</project>

@@ -1,0 +1,10 @@
+*.sh text eol=lf
+*.py text eol=lf
+*.jmx text eol=lf
+*.tsv text eol=lf
+*.jtl -diff
+*.gz binary
+*.zip binary
+*.docx binary
+*.pdf binary
+*.png binary
