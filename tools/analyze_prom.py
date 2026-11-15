@@ -25,6 +25,7 @@ HOSTS = {
     "172.31.13.151:9100": "CDWY5",  # 服务器 C：MongoDB
 }
 JOB = {"jpa": "lab4-logjpa", "mongo": "lab4-logmongo"}
+CORES = 2  # 5 台服务器都是 2 核
 
 
 def parse_dump(path):
@@ -54,17 +55,37 @@ def select(series, name, **match):
     return out
 
 
+def merged(series, name, **match):
+    """同一指标的所有序列合并为一组点。Mongo 驱动指标带 cluster_id 标签，服务每重启一次换一个值，会拆成多条序列。"""
+    pts = []
+    for _, p in select(series, name, **match):
+        pts.extend(p)
+    return sorted(pts)
+
+
 def window(pts, t0, t1):
     return [(t, v) for t, v in pts if t0 <= t <= t1]
 
 
 def increase(pts, t0, t1):
     """计数器在 [t0,t1] 内的增量（处理计数器重置）。"""
+    return increase_span(pts, t0, t1)[0]
+
+
+def increase_span(pts, t0, t1):
+    """返回（增量，覆盖秒数）。增量只覆盖窗口内第一个到最后一个样本之间，算速率时要除以这段时长，
+    不能除以整个窗口长度（否则会因 2 秒抓取间隔的边界而偏低几个百分点）。"""
     w = window(pts, t0, t1)
     inc = 0.0
     for (_, a), (_, b) in zip(w, w[1:]):
         inc += b - a if b >= a else b
-    return inc
+    span = (w[-1][0] - w[0][0]) / 1000.0 if len(w) >= 2 else 0.0
+    return inc, span
+
+
+def rate(pts, t0, t1):
+    inc, span = increase_span(pts, t0, t1)
+    return inc / span if span > 0 else None
 
 
 def gauge_stats(pts, t0, t1):
@@ -120,44 +141,45 @@ def summarize_run(series, run):
         wb = select(series, "node_disk_written_bytes_total", instance=host, device="vda")
         wc = select(series, "node_disk_writes_completed_total", instance=host, device="vda")
         io = select(series, "node_disk_io_time_seconds_total", instance=host, device="vda")
-        row[name + "_disk_write_mb_s"] = round(increase(wb[0][1], t0, t1) / secs / 1048576, 2) if wb else None
-        row[name + "_disk_write_iops"] = round(increase(wc[0][1], t0, t1) / secs, 1) if wc else None
-        row[name + "_disk_util_pct"] = round(100 * increase(io[0][1], t0, t1) / secs, 1) if io else None
+        row[name + "_disk_write_mb_s"] = round(rate(wb[0][1], t0, t1) / 1048576, 2) if wb else None
+        row[name + "_disk_write_iops"] = round(rate(wc[0][1], t0, t1), 1) if wc else None
+        row[name + "_disk_util_pct"] = round(100 * rate(io[0][1], t0, t1), 1) if io else None
     # 应用（JVM）指标
-    pc = select(series, "process_cpu_usage", job=job)
-    row["app_process_cpu_pct"] = round(100 * gauge_stats(pc[0][1], t0, t1)[0], 1) if pc and gauge_stats(pc[0][1], t0, t1)[0] is not None else None
-    th = select(series, "jvm_threads_live_threads", job=job)
-    row["app_live_threads_max"] = int(gauge_stats(th[0][1], t0, t1)[1]) if th and gauge_stats(th[0][1], t0, t1)[1] is not None else None
+    pc_avg, _ = gauge_stats(merged(series, "process_cpu_usage", job=job), t0, t1)
+    row["app_process_cpu_pct"] = round(100 * pc_avg, 1) if pc_avg is not None else None
+    _, th_max = gauge_stats(merged(series, "jvm_threads_live_threads", job=job), t0, t1)
+    row["app_live_threads_max"] = int(th_max) if th_max is not None else None
     heap_by_ts = defaultdict(float)
     for d, pts in select(series, "jvm_memory_used_bytes", job=job, area="heap"):
         for t, v in window(pts, t0, t1):
             heap_by_ts[t] += v
     row["app_heap_used_max_mb"] = round(max(heap_by_ts.values()) / 1048576) if heap_by_ts else None
-    gc = sum(increase(p, t0, t1) for _, p in select(series, "jvm_gc_pause_seconds_sum", job=job))
-    row["app_gc_pause_pct"] = round(100 * gc / secs, 2)
-    busy = select(series, "tomcat_threads_busy_threads", job=job)
-    if busy:
-        avg, mx = gauge_stats(busy[0][1], t0, t1)
-        row["tomcat_busy_avg"], row["tomcat_busy_max"] = (round(avg, 1) if avg is not None else None), mx
+    gc = sum(rate(p, t0, t1) or 0 for _, p in select(series, "jvm_gc_pause_seconds_sum", job=job))
+    row["app_gc_pause_pct"] = round(100 * gc, 2)
     if impl == "jpa":
-        act = select(series, "hikaricp_connections_active", job=job)
-        pend = select(series, "hikaricp_connections_pending", job=job)
+        act = merged(series, "hikaricp_connections_active", job=job)
+        pend = merged(series, "hikaricp_connections_pending", job=job)
     else:
-        act = select(series, "mongodb_driver_pool_checkedout", job=job)
-        pend = select(series, "mongodb_driver_pool_waitqueuesize", job=job)
-    if act:
-        avg, mx = gauge_stats(act[0][1], t0, t1)
-        row["pool_in_use_avg"], row["pool_in_use_max"] = (round(avg, 1) if avg is not None else None), mx
-    if pend:
-        row["pool_waiting_max"] = gauge_stats(pend[0][1], t0, t1)[1]
+        act = merged(series, "mongodb_driver_pool_checkedout", job=job)
+        pend = merged(series, "mongodb_driver_pool_waitqueuesize", job=job)
+    avg, mx = gauge_stats(act, t0, t1)
+    row["pool_in_use_avg"] = round(avg, 1) if avg is not None else None
+    row["pool_in_use_max"] = mx
+    row["pool_waiting_max"] = gauge_stats(pend, t0, t1)[1]
     # 服务端视角的请求数与平均处理时间（与 JMeter 客户端结果核对）
     method = "GET" if run["op"] == "read" else "POST"
     cnt = select(series, "http_server_requests_seconds_count", job=job, uri="/api/logs", method=method)
     sm = select(series, "http_server_requests_seconds_sum", job=job, uri="/api/logs", method=method)
     c = sum(increase(p, t0, t1) for _, p in cnt)
     s = sum(increase(p, t0, t1) for _, p in sm)
-    row["server_tps"] = round(c / secs, 1) if c else None
+    tps = sum(rate(p, t0, t1) or 0 for _, p in cnt)
+    row["server_tps"] = round(tps, 1) if tps else None
     row["server_avg_ms"] = round(1000 * s / c, 2) if c else None
+    # 每个请求消耗的 CPU 时间（毫秒）= 核数 × 使用率 ÷ 每秒请求数；比较两种实现在各层的开销
+    db = "CDWY2" if impl == "jpa" else "CDWY5"
+    if tps:
+        row["app_host_cpu_ms_per_req"] = round(CORES * row["CDWY1_cpu_pct"] / 100 * 1000 / tps, 3)
+        row["db_host_cpu_ms_per_req"] = round(CORES * row[db + "_cpu_pct"] / 100 * 1000 / tps, 3)
     return row
 
 
@@ -171,12 +193,11 @@ def timeseries(series, run):
         if name != "CDWY4":
             out["series"][name + "_cpu_pct"] = cpu_timeseries(series, host, t0, t1)
     for metric, key in (("process_cpu_usage", "app_process_cpu"), ("jvm_threads_live_threads", "app_live_threads"),
-                        ("tomcat_threads_busy_threads", "tomcat_busy_threads"),
                         ("hikaricp_connections_active" if impl == "jpa" else "mongodb_driver_pool_checkedout", "pool_in_use"),
                         ("hikaricp_connections_pending" if impl == "jpa" else "mongodb_driver_pool_waitqueuesize", "pool_waiting")):
-        sel = select(series, metric, job=job)
-        if sel:
-            out["series"][key] = [[t, v] for t, v in window(sel[0][1], t0, t1)]
+        pts = merged(series, metric, job=job)
+        if pts:
+            out["series"][key] = [[t, v] for t, v in window(pts, t0, t1)]
     return out
 
 

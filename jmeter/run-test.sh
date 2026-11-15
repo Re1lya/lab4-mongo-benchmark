@@ -1,7 +1,7 @@
 #!/bin/bash
 # 在压测机（服务器 A，CDWY3）上执行一次 JMeter 非 GUI 测试，结果放在独立目录：
-#   samples.jtl（原始 JTL，CSV 格式；不保存 URL 等无关字段以控制体积）、jmeter.log、console.log、start.txt/end.txt（UTC，用于对应 Prometheus 时间段）、
-#   params.txt（本次参数）、report/（JMeter HTML 报告）
+#   samples.jtl（原始 JTL，CSV 格式；不保存 URL 等无关字段以控制体积）、jmeter.log、console.log、
+#   start.txt/end.txt（UTC，用于对应 Prometheus 时间段）、params.txt（本次参数）
 #
 # 用法：bash run-test.sh <ReadLog|WriteLog> <主机> <端口> <线程数> <升压秒数> <持续秒数> <输出目录>
 # 例：  bash run-test.sh ReadLog 172.31.1.202 8081 100 10 60 /root/lab4/results/jpa-read-load-t100
@@ -25,9 +25,4 @@ jmeter -n -t "$PLAN.jmx" \
   -l "$OUT/samples.jtl" -j "$OUT/jmeter.log" > "$OUT/console.log" 2>&1
 date -u +%Y-%m-%dT%H:%M:%S.%3NZ > "$OUT/end.txt"
 
-# HTML 报告（压测结束后生成，不占用测试期间的 CPU）；图表粒度 1 秒。
-# statistic_window=-1：百分位用全部样本计算（默认只用最后 2 万个样本，P95/P99 不准）
-jmeter -g "$OUT/samples.jtl" -o "$OUT/report" -Jjmeter.reportgenerator.overall_granularity=1000 \
-  -Jjmeter.reportgenerator.statistic_window=-1 \
-  -j "$OUT/report.log" >> "$OUT/console.log" 2>&1 || echo "report generation failed" >> "$OUT/console.log"
-grep -E 'summary =|failed' "$OUT/console.log" | tail -2 || true
+grep 'summary =' "$OUT/console.log" | tail -1 || true

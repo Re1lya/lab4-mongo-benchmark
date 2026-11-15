@@ -7,6 +7,7 @@
 """
 import argparse
 import csv
+import gzip
 import os
 from collections import defaultdict
 
@@ -38,6 +39,7 @@ plt.rcParams.update({
     "axes.spines.top": False, "axes.spines.right": False,
     "axes.grid": True, "axes.grid.axis": "y", "grid.color": GRID, "grid.linewidth": 0.8, "grid.linestyle": "-",
     "legend.frameon": False, "axes.titlesize": 11, "axes.titleweight": "bold", "axes.titlecolor": INK,
+    "axes.titlepad": 10,
 })
 
 
@@ -62,21 +64,24 @@ def level_series(rows, op, impl, key):
 
 
 def style_levels(ax):
-    """x 轴用等距的线程档位；压力测试区间加浅色底，并在上方标注。"""
+    """x 轴用等距的线程档位；压力测试区间加浅色底，并在上方标注；最后添加末端标注。"""
     ax.set_xticks(range(len(LEVELS)))
     ax.set_xticklabels([str(t) for t in LEVELS])
     ax.set_xlabel("JMeter 线程数")
     split = LEVELS.index(200) - 0.5
     ax.axvspan(split, len(LEVELS) - 0.5, color=BAND, zorder=0, lw=0)
     ax.set_xlim(-0.5, len(LEVELS) - 0.5)
-    y1 = ax.get_ylim()[1]
-    ax.text(split / 2 - 0.25, y1, "负载测试", ha="center", va="bottom", color=MUTED, fontsize=9)
-    ax.text((split + len(LEVELS) - 0.5) / 2, y1, "压力测试", ha="center", va="bottom", color=MUTED, fontsize=9)
+    # 区间名称放在绘图区内顶端（x 用数据坐标，y 用坐标轴比例），不与标题重叠
+    tr = ax.get_xaxis_transform()
+    ax.text((split - 0.5) / 2, 0.97, "负载测试", transform=tr, ha="center", va="top", color=MUTED, fontsize=9)
+    ax.text((split + len(LEVELS) - 0.5) / 2, 0.97, "压力测试", transform=tr, ha="center", va="top", color=MUTED, fontsize=9)
     ax.tick_params(axis="x", length=0)
     ax.tick_params(axis="y", length=0)
+    add_end_labels(ax)
 
 
 def plot_lines(ax, xs_by_impl, ys_by_impl, end_label=True, fmt="{:.0f}"):
+    ends = {}
     for impl in ("jpa", "mongo"):
         xs, ys = xs_by_impl[impl], ys_by_impl[impl]
         pts = [(x, y) for x, y in zip(xs, ys) if y is not None]
@@ -85,9 +90,21 @@ def plot_lines(ax, xs_by_impl, ys_by_impl, end_label=True, fmt="{:.0f}"):
         px, py = zip(*pts)
         ax.plot(px, py, color=SERIES[impl], lw=2, solid_capstyle="round", solid_joinstyle="round",
                 marker="o", ms=8, mfc=SERIES[impl], mec=SURFACE, mew=2, label=LABEL[impl], zorder=3)
-        if end_label:
-            ax.annotate(SHORT[impl] + " " + fmt.format(py[-1]), (px[-1], py[-1]), xytext=(6, 0),
-                        textcoords="offset points", va="center", fontsize=8.5, color=INK2)
+        ends[impl] = (px[-1], py[-1])
+    if end_label:
+        ax._lab4_end_labels = (ends, fmt)  # 纵轴范围确定后再决定是否标注，见 add_end_labels
+
+
+def add_end_labels(ax):
+    """末端标注：两条线末端太近（不到纵轴范围的 7%）时不标，避免文字重叠；数值见图例和表格。"""
+    ends, fmt = getattr(ax, "_lab4_end_labels", ({}, "{:.0f}"))
+    if len(ends) == 2:
+        y0, y1 = ax.get_ylim()
+        if abs(ends["jpa"][1] - ends["mongo"][1]) < 0.07 * (y1 - y0):
+            return
+    for impl, (x, y) in ends.items():
+        ax.annotate(SHORT[impl] + " " + fmt.format(y), (x, y), xytext=(6, 0),
+                    textcoords="offset points", va="center", fontsize=8.5, color=INK2)
 
 
 def level_chart(ax, rows, op, key, title, ylabel, fmt="{:.0f}", ymin0=True):
@@ -96,7 +113,7 @@ def level_chart(ax, rows, op, key, title, ylabel, fmt="{:.0f}", ymin0=True):
                {impl: level_series(rows, op, impl, key) for impl in ("jpa", "mongo")}, fmt=fmt)
     if ymin0:
         ax.set_ylim(bottom=0)
-    ax.set_ylim(top=ax.get_ylim()[1] * 1.12)
+    ax.set_ylim(top=ax.get_ylim()[1] * 1.18)
     ax.set_title(title, loc="left")
     ax.set_ylabel(ylabel)
     style_levels(ax)
@@ -133,7 +150,7 @@ def cpu_overview(prom, out_dir):
                 ys[impl] = level_series(prom, op, impl, k)
             xs = list(range(len(LEVELS)))
             plot_lines(ax, {"jpa": xs, "mongo": xs}, ys, fmt="{:.0f}%")
-            ax.set_ylim(0, 112)
+            ax.set_ylim(0, 118)
             ax.set_yticks([0, 25, 50, 75, 100])
             ax.set_title("%s · %s" % (op_name, name), loc="left", fontsize=10)
             if c_i == 0:
@@ -154,7 +171,7 @@ def disk_chart(prom, out_dir):
         xs = list(range(len(LEVELS)))
         plot_lines(ax, {"jpa": xs, "mongo": xs}, ys, fmt=fmt)
         ax.set_ylim(bottom=0)
-        ax.set_ylim(top=ax.get_ylim()[1] * 1.12)
+        ax.set_ylim(top=ax.get_ylim()[1] * 1.18)
         ax.set_title(title, loc="left")
         ax.set_ylabel(unit)
         style_levels(ax)
@@ -165,12 +182,14 @@ def disk_chart(prom, out_dir):
     save(fig, out_dir, "write-disk.png")
 
 
-def per_second(jtl_path):
+def per_second(run_dir):
     """JTL → 每秒请求数和平均响应时间（按样本时间戳取整到秒）。"""
     cnt = defaultdict(int)
     tot = defaultdict(int)
     t0 = None
-    with open(jtl_path, newline="", encoding="utf-8") as f:
+    path = os.path.join(run_dir, "samples.jtl")
+    f = open(path, newline="", encoding="utf-8") if os.path.exists(path) else gzip.open(path + ".gz", "rt", newline="", encoding="utf-8")
+    with f:
         for row in csv.DictReader(f):
             ts = int(row["timeStamp"])
             t0 = ts if t0 is None else min(t0, ts)
@@ -183,28 +202,36 @@ def per_second(jtl_path):
 
 
 def stress_timeline(round_dir, op, out_dir, op_title):
+    """400 线程压力测试与紧接着的 10 线程恢复检查：每秒请求数与平均响应时间。两次测试分段绘制，中间的冷却间隔留空。"""
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.9))
+    gap = 20  # 两次测试之间的冷却时间（秒），图上留出同样的空白
+    seg_spans = []
     for impl in ("jpa", "mongo"):
-        xs_all, tps_all, lat_all = [], [], []
         offset = 0
-        for phase, t in (("stress", 400), ("recovery", 10)):
-            path = os.path.join(round_dir, "%s-%s-%s-t%d" % (impl, op, phase, t), "samples.jtl")
-            if not os.path.exists(path):
+        for i, (phase, t) in enumerate((("stress", 400), ("recovery", 10))):
+            run_dir = os.path.join(round_dir, "%s-%s-%s-t%d" % (impl, op, phase, t))
+            if not any(os.path.exists(os.path.join(run_dir, n)) for n in ("samples.jtl", "samples.jtl.gz")):
                 continue
-            xs, tps, lat = per_second(path)
-            xs_all += [x + offset for x in xs]
-            tps_all += tps
-            lat_all += lat
-            offset = xs_all[-1] + 25  # 两次测试之间约 20 秒冷却，画图时留出间隔
-        for ax, ys in ((axes[0], tps_all), (axes[1], lat_all)):
-            ax.plot(xs_all, ys, color=SERIES[impl], lw=1.6, label=LABEL[impl], solid_joinstyle="round")
+            xs, tps, lat = per_second(run_dir)
+            # 去掉首尾两个不满一秒的点，避免出现假的骤降
+            xs, tps, lat = xs[1:-1], tps[1:-1], lat[1:-1]
+            xs = [x + offset for x in xs]
+            for ax, ys in ((axes[0], tps), (axes[1], lat)):
+                ax.plot(xs, ys, color=SERIES[impl], lw=1.6, solid_joinstyle="round",
+                        label=LABEL[impl] if i == 0 else None)
+            if impl == "jpa":
+                seg_spans.append((xs[0], xs[-1], "400 线程压力测试" if phase == "stress" else "10 线程恢复检查"))
+            offset = xs[-1] + gap
     axes[0].set_title("每秒完成的请求数", loc="left")
     axes[0].set_ylabel("次/秒")
     axes[1].set_title("每秒平均响应时间", loc="left")
     axes[1].set_ylabel("毫秒")
     for ax in axes:
-        ax.set_ylim(bottom=0)
-        ax.set_xlabel("时间（秒）：左段为 400 线程压力测试，右段为紧接着的 10 线程恢复检查")
+        ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
+        tr = ax.get_xaxis_transform()
+        for x0, x1, name in seg_spans:
+            ax.text((x0 + x1) / 2, 0.97, name, transform=tr, ha="center", va="top", color=MUTED, fontsize=9)
+        ax.set_xlabel("时间（秒）")
         ax.tick_params(length=0)
     h, l = axes[0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.06), fontsize=9.5, labelcolor=INK)

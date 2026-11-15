@@ -13,13 +13,12 @@
 | 操作手册（部署、数据、压测、监控、统计） | [docs/01-实验操作手册.md](docs/01-实验操作手册.md) |
 | 知识笔记（原理与踩坑） | [docs/02-知识笔记.md](docs/02-知识笔记.md) |
 | 实验过程记录（时间线、问题与解决） | [docs/03-实验过程记录.md](docs/03-实验过程记录.md) |
-| 答辩问答 | [docs/04-答辩问答.md](docs/04-答辩问答.md) |
 | 两套实现源码 | [logdemo/](logdemo/)：`logdemo-core`（共用接口与业务）、`logdemo-jpa`、`logdemo-mongo` |
 | 数据库初始化脚本 | [db/mysql/](db/mysql/)、[db/mongo/](db/mongo/) |
 | JMeter 测试计划与请求数据 | [jmeter/](jmeter/)：`WriteLog.jmx`、`ReadLog.jmx`、`data/` |
 | 部署与测试脚本 | [deploy/](deploy/)：Swarm 部署文件、Prometheus 配置、装数/核对/压测/导出脚本 |
 | 数据生成与统计工具 | [tools/](tools/) |
-| 原始数据（JTL、监控、日志）与统计图表 | [results/](results/) |
+| 原始 JTL、Prometheus 监控数据与统计图表 | [results/](results/) |
 
 ## 接口
 

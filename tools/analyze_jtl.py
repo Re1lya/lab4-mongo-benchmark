@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""实验四 JTL 统计：每次测试一行，输出 CSV 和 Markdown 表，并与 JMeter HTML 报告交叉核对。
+"""实验四 JTL 统计：每次测试一行，输出 CSV 和 Markdown 表。
 
-目录约定（run-suite.sh 生成）：<轮次目录>/<实现>-<读写>-<阶段>-t<线程数>/samples.jtl、params.txt、
-db-rows.txt（写测试）、report/statistics.json（JMeter HTML 报告的统计）。
+目录约定（run-suite.sh 生成）：<轮次目录>/<实现>-<读写>-<阶段>-t<线程数>/samples.jtl(.gz)、params.txt、
+db-rows.txt（写测试）。
 
 两种口径：
-  全程：JTL 中全部样本（含升压、降压），与 JMeter HTML 报告“Total”一行同口径，用于核对；
+  全程：JTL 中全部样本（含升压、降压）；
   稳态：活跃线程数 grpThreads 等于设定线程数的时间段（所有线程都在发请求），用于比较两种实现。
 写测试另核对：成功（HTTP 201）请求数 == 数据库新增行数。
 
@@ -13,7 +13,7 @@ db-rows.txt（写测试）、report/statistics.json（JMeter HTML 报告的统�
 """
 import argparse
 import csv
-import json
+import gzip
 import math
 import os
 import re
@@ -51,9 +51,21 @@ def stats(samples, window_ms):
     }
 
 
-def load_samples(path):
+def open_jtl(run_dir):
+    """优先读 samples.jtl，没有则读仓库中保存的 samples.jtl.gz。"""
+    path = os.path.join(run_dir, "samples.jtl")
+    if os.path.exists(path):
+        return open(path, newline="", encoding="utf-8")
+    return gzip.open(path + ".gz", "rt", newline="", encoding="utf-8")
+
+
+def has_jtl(run_dir):
+    return any(os.path.exists(os.path.join(run_dir, n)) for n in ("samples.jtl", "samples.jtl.gz"))
+
+
+def load_samples(run_dir):
     out = []
-    with open(path, newline="", encoding="utf-8") as f:
+    with open_jtl(run_dir) as f:
         for row in csv.DictReader(f):
             out.append({
                 "ts": int(row["timeStamp"]),
@@ -69,7 +81,7 @@ def load_samples(path):
 def analyze_run(run_dir, name):
     m = NAME_RE.match(name)
     impl, op, phase, threads = m.group(1), m.group(2), m.group(3), int(m.group(4))
-    samples = load_samples(os.path.join(run_dir, "samples.jtl"))
+    samples = load_samples(run_dir)
     if not samples:
         return None
     t0 = min(s["ts"] for s in samples)
@@ -104,16 +116,6 @@ def analyze_run(run_dir, name):
         row["db_inserted"] = ""
         row["db_check"] = ""
 
-    # 与 JMeter HTML 报告（statistics.json 的 Total）核对全程口径
-    stat_file = os.path.join(run_dir, "report", "statistics.json")
-    if os.path.exists(stat_file):
-        total = json.load(open(stat_file, encoding="utf-8")).get("Total", {})
-        same_count = total.get("sampleCount") == full["samples"] and total.get("errorCount") == full["errors"]
-        p99_close = abs(float(total.get("pct3ResTime", 0)) - full["p99_ms"]) <= 1
-        row["jmeter_report_check"] = "一致" if same_count and p99_close else \
-            "差异(count %s/%s, p99 %s/%s)" % (total.get("sampleCount"), full["samples"], total.get("pct3ResTime"), full["p99_ms"])
-    else:
-        row["jmeter_report_check"] = "无报告"
     return row
 
 
@@ -127,7 +129,7 @@ def main():
     rows = []
     for d in sorted(os.listdir(args.round_dir)):
         full_dir = os.path.join(args.round_dir, d)
-        if os.path.isdir(full_dir) and NAME_RE.match(d) and os.path.exists(os.path.join(full_dir, "samples.jtl")):
+        if os.path.isdir(full_dir) and NAME_RE.match(d) and has_jtl(full_dir):
             r = analyze_run(full_dir, d)
             if r:
                 rows.append(r)
@@ -142,17 +144,17 @@ def main():
         w.writerows(rows)
 
     lines = ["# JTL 统计（%s）" % name, "",
-             "稳态 = 所有线程都在运行的时间段；全程 = 含升压/降压的全部样本（与 JMeter 报告同口径）。", ""]
+             "稳态 = 所有线程都在运行的时间段；全程 = 含升压/降压的全部样本。时间单位毫秒。", ""]
     for op, title in (("read", "查询 GET /api/logs"), ("write", "写入 POST /api/logs")):
         lines += ["## " + title, "",
-                  "| 阶段 | 线程 | 实现 | 稳态吞吐(次/秒) | 平均(ms) | P50 | P90 | P95 | P99 | 最大 | 错误率 | 全程样本 | 报告核对 | 入库核对 |",
-                  "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"]
+                  "| 阶段 | 线程 | 实现 | 稳态吞吐(次/秒) | 平均(ms) | P50 | P90 | P95 | P99 | 最大 | 错误率 | 全程样本 | 入库核对 |",
+                  "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
         for r in rows:
             if r["op"] != op:
                 continue
             lines.append("| {phase} | {threads} | {impl} | {steady_throughput} | {steady_avg_ms} | {steady_p50_ms} | "
                          "{steady_p90_ms} | {steady_p95_ms} | {steady_p99_ms} | {steady_max_ms} | {full_error_pct}% | "
-                         "{full_samples} | {jmeter_report_check} | {db_check} |".format(**r))
+                         "{full_samples} | {db_check} |".format(**r))
         lines.append("")
     with open(os.path.join(args.out, "jtl-summary-%s.md" % name), "w", encoding="utf-8") as f:
         f.write("\n".join(lines))

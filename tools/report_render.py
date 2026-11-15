@@ -238,7 +238,7 @@ tbody tr:last-child td { border-bottom: 1.2pt solid #000; }
 def render_html(blocks, out_path, header_text, title):
     base = os.path.dirname(os.path.abspath(out_path))
     parts = ["<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><title>%s</title><style>%s</style></head><body>"
-             % (html.escape(title), CSS % {"header": header_text.replace('"', "'")})]
+             % (html.escape(title), CSS.replace("%(header)s", header_text.replace('"', "'")))]
     for b in blocks:
         kind = b[0]
         e = html.escape
