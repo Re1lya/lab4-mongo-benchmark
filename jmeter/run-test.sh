@@ -4,6 +4,7 @@
 #   start.txt/end.txt（UTC，用于对应 Prometheus 时间段）、params.txt（本次参数）
 #
 # 用法：bash run-test.sh <ReadLog|WriteLog> <主机> <端口> <线程数> <升压秒数> <持续秒数> <输出目录>
+# 可选环境变量 LOOPS=N：每个线程循环 N 次后结束（默认 -1，只按持续时间运行）
 # 例：  bash run-test.sh ReadLog 172.31.1.202 8081 100 10 60 /root/lab4/results/jpa-read-load-t100
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -14,11 +15,12 @@ mkdir -p "$OUT"
 export HEAP="${JMETER_HEAP:--Xms256m -Xmx400m -XX:MaxMetaspaceSize=128m}"
 export JVM_ARGS="${JMETER_JVM_ARGS:--Xss256k}"
 
-printf 'plan=%s\nhost=%s\nport=%s\nthreads=%s\nrampTime=%s\nduration=%s\nheap=%s\njvm_args=%s\n' \
-  "$PLAN" "$HOST" "$PORT" "$THREADS" "$RAMP" "$DURATION" "$HEAP" "$JVM_ARGS" > "$OUT/params.txt"
+LOOPS=${LOOPS:--1}
+printf 'plan=%s\nhost=%s\nport=%s\nthreads=%s\nrampTime=%s\nduration=%s\nloops=%s\nheap=%s\njvm_args=%s\n' \
+  "$PLAN" "$HOST" "$PORT" "$THREADS" "$RAMP" "$DURATION" "$LOOPS" "$HEAP" "$JVM_ARGS" > "$OUT/params.txt"
 date -u +%Y-%m-%dT%H:%M:%S.%3NZ > "$OUT/start.txt"
 jmeter -n -t "$PLAN.jmx" \
-  -Jhostname="$HOST" -Jport="$PORT" -Jthread="$THREADS" -JrampTime="$RAMP" -Jduration="$DURATION" -JdataDir=data \
+  -Jhostname="$HOST" -Jport="$PORT" -Jthread="$THREADS" -JrampTime="$RAMP" -Jduration="$DURATION" -Jloops="$LOOPS" -JdataDir=data \
   -Jjmeter.save.saveservice.output_format=csv \
   -Jjmeter.save.saveservice.url=false -Jjmeter.save.saveservice.data_type=false \
   -Jjmeter.save.saveservice.idle_time=false \

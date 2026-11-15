@@ -3,6 +3,7 @@
   实验四 日志查询测试：GET /api/logs?level=&from=&to=&page=&size=
   两种实现共用本文件，只通过 -J 参数替换被测主机和端口：
     jmeter -n -t ReadLog.jmx -Jhostname=172.31.1.202 -Jport=8081 -Jthread=50 -JrampTime=10 -Jduration=60 -l samples.jtl
+  可选 -Jloops=N：每个线程循环 N 次后结束（默认 -1 = 不限次数，只按持续时间运行，正式测试用的就是默认值）。
   查询参数来自 data/read-queries.tsv（gen_data.py 生成，固定随机种子）：级别、时间范围 [from,to)、页码；每页 20 条。
   断言：HTTP 200，且响应体包含 "errno":0。
 -->
@@ -81,7 +82,7 @@
       <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="查询线程组">
         <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller">
-          <stringProp name="LoopController.loops">-1</stringProp>
+          <stringProp name="LoopController.loops">${__P(loops,-1)}</stringProp>
           <boolProp name="LoopController.continue_forever">false</boolProp>
         </elementProp>
         <stringProp name="ThreadGroup.num_threads">${thread}</stringProp>

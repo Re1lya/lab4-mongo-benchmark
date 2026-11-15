@@ -2,7 +2,7 @@
 
 基于 Spring Data JPA 与 Spring Data MongoDB 的对照实现。同一套日志模型、接口、请求数据和测试方法，分别接入 MySQL 9.2 和 MongoDB 7.0，在 5 台 2 核服务器（Docker Swarm）上用 JMeter 做负载测试和压力测试，并用 Prometheus 监控。
 
-> 结论摘要见[实验报告](report/)；本页只做导航。
+> 结论摘要见[实验报告](report/)；本页只做导航。Gitee 提交仓库：[W2097382371/lab4-mongo-benchmark](https://gitee.com/W2097382371/lab4-mongo-benchmark)（只含指导书要求的提交材料）。
 
 ## 目录
 
@@ -13,6 +13,7 @@
 | 操作手册（部署、数据、压测、监控、统计） | [docs/01-实验操作手册.md](docs/01-实验操作手册.md) |
 | 知识笔记（原理与踩坑） | [docs/02-知识笔记.md](docs/02-知识笔记.md) |
 | 实验过程记录（时间线、问题与解决） | [docs/03-实验过程记录.md](docs/03-实验过程记录.md) |
+| 验收演示手册（改参数看曲线、现场查数据、常见问题） | [docs/04-验收演示.md](docs/04-验收演示.md) |
 | 两套实现源码 | [logdemo/](logdemo/)：`logdemo-core`（共用接口与业务）、`logdemo-jpa`、`logdemo-mongo` |
 | 数据库初始化脚本 | [db/mysql/](db/mysql/)、[db/mongo/](db/mongo/) |
 | JMeter 测试计划与请求数据 | [jmeter/](jmeter/)：`WriteLog.jmx`、`ReadLog.jmx`、`data/` |
