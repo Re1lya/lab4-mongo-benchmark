@@ -25,7 +25,9 @@ jmeter -n -t "$PLAN.jmx" \
   -l "$OUT/samples.jtl" -j "$OUT/jmeter.log" > "$OUT/console.log" 2>&1
 date -u +%Y-%m-%dT%H:%M:%S.%3NZ > "$OUT/end.txt"
 
-# HTML 报告（压测结束后生成，不占用测试期间的 CPU）；图表粒度 1 秒
+# HTML 报告（压测结束后生成，不占用测试期间的 CPU）；图表粒度 1 秒。
+# statistic_window=-1：百分位用全部样本计算（默认只用最后 2 万个样本，P95/P99 不准）
 jmeter -g "$OUT/samples.jtl" -o "$OUT/report" -Jjmeter.reportgenerator.overall_granularity=1000 \
+  -Jjmeter.reportgenerator.statistic_window=-1 \
   -j "$OUT/report.log" >> "$OUT/console.log" 2>&1 || echo "report generation failed" >> "$OUT/console.log"
 grep -E 'summary =|failed' "$OUT/console.log" | tail -2 || true
