@@ -2,7 +2,9 @@
 
 基于 Spring Data JPA 与 Spring Data MongoDB 的对照实现。同一套日志模型、接口、请求数据和测试方法，分别接入 MySQL 9.2 和 MongoDB 7.0，在 5 台 2 核服务器（Docker Swarm）上用 JMeter 做负载测试和压力测试，并用 Prometheus 监控。
 
-> 结论摘要见[实验报告](report/)；本页只做导航。Gitee 提交仓库：[W2097382371/lab4-mongo-benchmark](https://gitee.com/W2097382371/lab4-mongo-benchmark)（只含指导书要求的提交材料）。
+测试分两个阶段：第 1 轮是 10～400 线程的梯度探索；第二阶段固定参数（查询 50 线程、写入 100 线程，每次 240 秒，统计第 60～240 秒）做 3 轮主对比，并补充 MongoDB j:true 持久性对照、并发量调优、连接池调优和 600～1000 线程的过载与恢复。
+
+> 结论见[实验报告](report/)；本页只做导航。Gitee 提交仓库：[W2097382371/lab4-mongo-benchmark](https://gitee.com/W2097382371/lab4-mongo-benchmark)（只含指导书要求的提交材料）。
 
 ## 目录
 
