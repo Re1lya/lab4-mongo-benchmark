@@ -1,0 +1,5 @@
+mongo-read-t50 summary = 443347 in 00:02:00 = 3690.7/s Avg:    12 Min:     0 Max:   314 Err:     0 (0.00%)
+jpa-read-t50 summary = 390586 in 00:02:00 = 3249.2/s Avg:    14 Min:     0 Max:   262 Err:     0 (0.00%)
+mongo-write-t100 summary = 766924 in 00:02:01 = 6360.2/s Avg:    14 Min:     0 Max:   276 Err:     0 (0.00%)
+jpa-write-t100 summary = 431802 in 00:02:00 = 3590.1/s Avg:    26 Min:     3 Max:   205 Err:     0 (0.00%)
+mongoj-write-t100 summary = 738006 in 00:02:00 = 6136.9/s Avg:    15 Min:     1 Max:   257 Err:     0 (0.00%)
