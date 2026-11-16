@@ -10,6 +10,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PLAN=$1; HOST=$2; PORT=$3; THREADS=$4; RAMP=$5; DURATION=$6; OUT=$7
 mkdir -p "$OUT"
+# 同一目录重跑（例如中断后续跑）时先删掉上次的文件：JMeter 的 -l/-j 是追加写入，不删会混入半截数据
+rm -f "$OUT/samples.jtl" "$OUT/jmeter.log" "$OUT/console.log" "$OUT/start.txt" "$OUT/end.txt" "$OUT/params.txt" "$OUT/db-rows.txt"
 
 # CDWY3 只有约 550MB 可用内存，JMeter 默认要 1GB 堆会启动失败，这里显式限制
 export HEAP="${JMETER_HEAP:--Xms256m -Xmx400m -XX:MaxMetaspaceSize=128m}"
