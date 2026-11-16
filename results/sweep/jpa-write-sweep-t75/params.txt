@@ -1,0 +1,9 @@
+plan=WriteLog
+host=172.31.1.202
+port=8081
+threads=75
+rampTime=20
+duration=240
+loops=-1
+heap=-Xms256m -Xmx400m -XX:MaxMetaspaceSize=128m
+jvm_args=-Xss256k
