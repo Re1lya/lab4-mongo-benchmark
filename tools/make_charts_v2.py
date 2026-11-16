@@ -197,15 +197,17 @@ def main():
     out = os.path.join(args.stats_dir, "charts")
     main_comparison(args.stats_dir, out)
     main_resources(args.stats_dir, out)
-    m1 = rows(os.path.join(args.stats_dir, "jtl-summary-m1.csv"))
-    # 并发量调优：50（查询）与 100（写入）两档取主对比第 1 轮
+    # 并发量调优缺少的两档取主对比：查询 50 线程取第 2 轮（数据库状态与并发量调优的查询测试相同：MongoDB 库中留有
+    # 上一项写入的日志、MySQL 为预置数据），写入 100 线程取第 1 轮（写入测试前都会重置数据库）
+    main_extra = ([r for r in rows(os.path.join(args.stats_dir, "jtl-summary-m2.csv")) if r["op"] == "read"]
+                  + [r for r in rows(os.path.join(args.stats_dir, "jtl-summary-m1.csv")) if r["op"] == "write"])
     sweep_like(args.stats_dir, out, "sweep", "并发量调优：25～150 线程（统计第 60～240 秒）",
                {"read": [25, 50, 75, 100, 150], "write": [25, 50, 75, 100, 150]},
                lambda r: int(r["threads"]) if r["phase"] in ("sweep", "main") and r["impl"] in ("jpa", "mongo") else None,
-               "JMeter 线程数", extra=m1)
+               "JMeter 线程数", extra=main_extra)
     pool_rows = rows(os.path.join(args.stats_dir, "jtl-summary-pool.csv"))
     pool_t = {r["op"]: int(r["threads"]) for r in pool_rows}
-    sweep_rows = rows(os.path.join(args.stats_dir, "jtl-summary-sweep.csv")) + m1
+    sweep_rows = rows(os.path.join(args.stats_dir, "jtl-summary-sweep.csv")) + main_extra
     extra = [dict(r, phase="pool100") for r in sweep_rows
              if r["op"] in pool_t and int(r["threads"]) == pool_t[r["op"]] and r["impl"] in ("jpa", "mongo")]
     sweep_like(args.stats_dir, out, "pool", "连接池调优：固定并发量，连接池 25 / 50 / 100",

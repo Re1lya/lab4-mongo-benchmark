@@ -224,13 +224,14 @@ h3 { font-size: 11pt; margin: 4.5mm 0 2mm; }
 h4 { font-size: 10.5pt; margin: 3.5mm 0 1.5mm; }
 p { margin: 0 0 1.6mm; text-indent: 2em; text-align: justify; }
 p.note { text-indent: 0; font-size: 9pt; }
-.caption { text-align: center; font-size: 9pt; margin: 2mm 0 1.5mm; text-indent: 0; break-after: avoid; }
+.caption { text-align: center; font-size: 9pt; margin: 2mm 0 1.5mm; text-indent: 0; break-after: avoid; page-break-after: avoid; }
 figure { margin: 2mm 0 3mm; text-align: center; break-inside: avoid; }
 figure img { max-width: 100%; }
 table { border-collapse: collapse; margin: 0 auto 3mm; font-size: 8.5pt; line-height: 1.35; break-inside: avoid; }
 thead th { border-top: 1.2pt solid #000; border-bottom: 0.6pt solid #000; padding: 1.2mm 2mm; font-weight: bold; }
 tbody td { padding: 0.9mm 2mm; text-align: center; }
 tbody tr:last-child td { border-bottom: 1.2pt solid #000; }
+.tbl { break-inside: avoid; page-break-inside: avoid; display: block; }  /* 表题与表格不分页 */
 .pagebreak { break-after: page; }
 """
 
@@ -264,8 +265,8 @@ def render_html(blocks, out_path, header_text, title):
             cols = "".join("<col style='width:%.1fcm'>" % w for w in widths) if widths else ""
             head = "".join("<th>%s</th>" % e(str(h)) for h in b[2])
             body = "".join("<tr>%s</tr>" % "".join("<td>%s</td>" % e(str(c)) for c in r) for r in b[3])
-            parts.append("<div class='caption'>%s</div><table><colgroup>%s</colgroup><thead><tr>%s</tr></thead><tbody>%s</tbody></table>"
-                         % (e(b[1]), cols, head, body))
+            parts.append("<div class='tbl'><div class='caption'>%s</div><table><colgroup>%s</colgroup><thead><tr>%s</tr></thead>"
+                         "<tbody>%s</tbody></table></div>" % (e(b[1]), cols, head, body))
         elif kind == "figure":
             rel = os.path.relpath(b[1], base)
             parts.append("<figure><img src='%s' style='width:%.1fcm'><div class='caption'>%s</div></figure>" % (e(rel), b[3], e(b[2])))

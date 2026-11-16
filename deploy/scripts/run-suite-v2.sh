@@ -153,13 +153,17 @@ sweep() {
 }
 
 prepare_cdwy4() { # 把 CDWY3 上的 JDK 与 JMeter 经内网复制到 CDWY4（只做一次），并同步 JMeter 计划与数据
+  local v
   if ! s cdwy4 'test -x /opt/apache-jmeter-5.6.3/bin/jmeter && test -x /opt/jdk-21/bin/java'; then
     log "  向 CDWY4 复制 JDK 21 与 JMeter 5.6.3（内网）"
-    s cdwy3 'tar -czf - -C /opt jdk-21 apache-jmeter-5.6.3' | s cdwy4 'tar -xzf - -C /opt'
+    # CDWY3 上的 /opt/jdk-21 是指向 /opt/java/amazon-corretto-... 的符号链接：链接和实际目录都要复制
+    s cdwy3 'tar -czf - -C /opt java jdk-21 apache-jmeter-5.6.3' | s cdwy4 'tar -xzf - -C /opt'
   fi
   s cdwy4 'mkdir -p /root/lab4 && printf "%s\n" "export JAVA_HOME=/opt/jdk-21" "export JMETER_HOME=/opt/apache-jmeter-5.6.3" "export PATH=\$JAVA_HOME/bin:\$JMETER_HOME/bin:\$PATH" > /root/lab4/jmeter-env.sh'
   s cdwy3 'tar -czf - -C /root/lab4 jmeter' | s cdwy4 'rm -rf /root/lab4/jmeter.new && mkdir /root/lab4/jmeter.new && tar -xzf - -C /root/lab4/jmeter.new && rm -rf /root/lab4/jmeter && mv /root/lab4/jmeter.new/jmeter /root/lab4/jmeter && rmdir /root/lab4/jmeter.new'
-  log "  CDWY4 JMeter：$(s cdwy4 'source /root/lab4/jmeter-env.sh; HEAP="-Xms128m -Xmx256m" jmeter --version 2>/dev/null | grep -o "5\.[0-9.]*" | head -1')"
+  v=$(s cdwy4 'source /root/lab4/jmeter-env.sh; HEAP="-Xms128m -Xmx256m" jmeter --version 2>/dev/null | grep -o "5\.[0-9.]*" | head -1' || true)
+  log "  CDWY4 JMeter：${v:-不可用}"
+  [ -n "$v" ] || { log "!! CDWY4 上的 JMeter 不可用"; return 1; }
 }
 
 overload() {

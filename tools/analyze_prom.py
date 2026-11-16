@@ -89,7 +89,7 @@ def rate(pts, t0, t1):
 
 
 def gauge_stats(pts, t0, t1):
-    vals = [v for _, v in window(pts, t0, t1)]
+    vals = [v for _, v in window(pts, t0, t1) if v == v]  # 去掉 NaN（序列结束时的 stale 标记）
     if not vals:
         return None, None
     return sum(vals) / len(vals), max(vals)
@@ -164,6 +164,11 @@ def summarize_run(series, run):
     row["pool_in_use_avg"] = round(avg, 1) if avg is not None else None
     row["pool_in_use_max"] = mx
     row["pool_waiting_max"] = gauge_stats(pend, t0, t1)[1]
+    # 连接池里实际存在的连接数（设定上限为 100 等）；连接被断开后要逐个重建，这段时间会低于上限
+    size = merged(series, "hikaricp_connections" if impl == "jpa" else "mongodb_driver_pool_size", job=job)
+    sizes = [v for _, v in window(size, t0, t1) if v == v]
+    row["pool_size_min"] = int(min(sizes)) if sizes else None
+    row["pool_size_avg"] = round(sum(sizes) / len(sizes), 1) if sizes else None
     # 服务端视角的请求数与平均处理时间（与 JMeter 客户端结果核对）
     method = "GET" if run["op"] == "read" else "POST"
     cnt = select(series, "http_server_requests_seconds_count", job=job, uri="/api/logs", method=method)

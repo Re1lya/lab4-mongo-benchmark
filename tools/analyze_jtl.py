@@ -55,6 +55,9 @@ def stats(samples, window_ms):
     elapsed = sorted(s["elapsed"] for s in samples)
     n = len(samples)
     errors = sum(1 for s in samples if not s["success"])
+    tps = n / (window_ms / 1000.0) if window_ms > 0 else float("nan")
+    threads = sum(s["grp"] for s in samples) / n if n else float("nan")
+    avg = sum(elapsed) / n if n else float("nan")
     return {
         "samples": n,
         "errors": errors,
@@ -67,6 +70,10 @@ def stats(samples, window_ms):
         "p99_ms": percentile(elapsed, 99),
         "max_ms": elapsed[-1] if elapsed else float("nan"),
         "window_s": round(window_ms / 1000.0, 1),
+        # 压测机自检：线程数 ÷ 吞吐量 = 每个线程发一次请求的周期，减去平均响应时间就是 JMeter 自身在两次请求之间花的时间。
+        # 正常时远小于 1 ms；明显变大说明压测机（CPU 等）成了瓶颈，结果不能代表被测系统。
+        "threads_avg": round(threads, 1),
+        "client_gap_ms": round(threads / tps * 1000 - avg, 2) if n and tps > 0 else float("nan"),
     }
 
 
