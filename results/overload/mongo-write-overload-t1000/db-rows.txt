@@ -1,0 +1,3 @@
+rows_before=100000
+rows_after=1577298
+inserted=1477298
