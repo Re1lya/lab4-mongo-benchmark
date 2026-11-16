@@ -49,6 +49,8 @@ services:
       TZ: Asia/Shanghai
       MYSQL_HOST: lab_mysql
       MYSQL_DATABASE: lab4_log
+      # 连接池最大连接数（默认 100；连接池调优时改为 25/50）
+      LOGDEMO_POOL_MAXSIZE: ${POOL_SIZE:-100}
     command:
       - --spring.config.additional-location=file:/run/secrets/lab4-jpa.properties
     deploy:
@@ -69,6 +71,9 @@ services:
     environment:
       JAVA_TOOL_OPTIONS: ${APP_JAVA_OPTS:--Xms384m -Xmx384m -Xss512k -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m}
       TZ: Asia/Shanghai
+      LOGDEMO_POOL_MAXSIZE: ${POOL_SIZE:-100}
+      # 写关注：false = w:1（默认）；true = w:1 + j:true（等日志落盘，持久性与 MySQL 对齐）
+      LOGDEMO_MONGO_JOURNAL: ${MONGO_JOURNAL:-false}
     command:
       - --spring.config.additional-location=file:/run/secrets/lab4-mongo.properties
     deploy:
