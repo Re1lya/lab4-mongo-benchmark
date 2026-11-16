@@ -1,6 +1,6 @@
 #!/bin/bash
 # 在压测机（服务器 A，CDWY3）上执行一次 JMeter 非 GUI 测试，结果放在独立目录：
-#   samples.jtl（原始 JTL，CSV 格式；不保存 URL 等无关字段以控制体积）、jmeter.log、console.log、
+#   samples.jtl（原始 JTL，CSV 格式；不保存 URL、线程名等统计用不到的字段，以控制体积）、jmeter.log、console.log、
 #   start.txt/end.txt（UTC，用于对应 Prometheus 时间段）、params.txt（本次参数）
 #
 # 用法：bash run-test.sh <ReadLog|WriteLog> <主机> <端口> <线程数> <升压秒数> <持续秒数> <输出目录>
@@ -23,7 +23,8 @@ jmeter -n -t "$PLAN.jmx" \
   -Jhostname="$HOST" -Jport="$PORT" -Jthread="$THREADS" -JrampTime="$RAMP" -Jduration="$DURATION" -Jloops="$LOOPS" -JdataDir=data \
   -Jjmeter.save.saveservice.output_format=csv \
   -Jjmeter.save.saveservice.url=false -Jjmeter.save.saveservice.data_type=false \
-  -Jjmeter.save.saveservice.idle_time=false \
+  -Jjmeter.save.saveservice.idle_time=false -Jjmeter.save.saveservice.thread_name=false \
+  -Jjmeter.save.saveservice.response_message=false -Jjmeter.save.saveservice.sent_bytes=false \
   -l "$OUT/samples.jtl" -j "$OUT/jmeter.log" > "$OUT/console.log" 2>&1
 date -u +%Y-%m-%dT%H:%M:%S.%3NZ > "$OUT/end.txt"
 

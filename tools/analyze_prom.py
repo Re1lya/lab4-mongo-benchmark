@@ -21,10 +21,10 @@ HOSTS = {
     "172.31.1.202:9100": "CDWY1",   # 服务器 E：两套日志服务
     "172.31.8.46:9100": "CDWY2",    # 服务器 B：MySQL
     "172.31.12.156:9100": "CDWY3",  # 服务器 A：JMeter
-    "172.31.1.19:9100": "CDWY4",    # 服务器 D：Prometheus
+    "172.31.1.19:9100": "CDWY4",    # 服务器 D：Prometheus（过载实验时兼作压测机）
     "172.31.13.151:9100": "CDWY5",  # 服务器 C：MongoDB
 }
-JOB = {"jpa": "lab4-logjpa", "mongo": "lab4-logmongo"}
+JOB = {"jpa": "lab4-logjpa", "mongo": "lab4-logmongo", "mongoj": "lab4-logmongo"}  # mongoj = MongoDB 版且 j:true
 CORES = 2  # 5 台服务器都是 2 核
 
 
@@ -128,9 +128,7 @@ def summarize_run(series, run):
     job = JOB[impl]
     row = {k: run[k] for k in ("impl", "op", "phase", "threads")}
     row["steady_s"] = round(secs, 1)
-    for host, name in HOSTS.items():
-        if name == "CDWY4":
-            continue
+    for host, name in HOSTS.items():  # CDWY4 在过载实验中兼作压测机
         busy, iow = host_cpu(series, host, t0, t1)
         row[name + "_cpu_pct"] = busy
         row[name + "_iowait_pct"] = iow
@@ -190,8 +188,7 @@ def timeseries(series, run):
            "window_utc_ms": [t0, t1], "steady_utc_ms": [int(run["steady_start_ms"]), int(run["steady_end_ms"])],
            "note": "cpu_pct 为每个抓取间隔（2 秒）的整机 CPU 使用率；其余为 Prometheus 原始样本", "series": {}}
     for host, name in HOSTS.items():
-        if name != "CDWY4":
-            out["series"][name + "_cpu_pct"] = cpu_timeseries(series, host, t0, t1)
+        out["series"][name + "_cpu_pct"] = cpu_timeseries(series, host, t0, t1)
     for metric, key in (("process_cpu_usage", "app_process_cpu"), ("jvm_threads_live_threads", "app_live_threads"),
                         ("hikaricp_connections_active" if impl == "jpa" else "mongodb_driver_pool_checkedout", "pool_in_use"),
                         ("hikaricp_connections_pending" if impl == "jpa" else "mongodb_driver_pool_waitqueuesize", "pool_waiting")):

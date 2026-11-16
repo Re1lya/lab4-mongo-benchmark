@@ -4,9 +4,11 @@
 目录约定（run-suite.sh 生成）：<轮次目录>/<实现>-<读写>-<阶段>-t<线程数>/samples.jtl(.gz)、params.txt、
 db-rows.txt（写测试）。
 
-两种口径：
-  全程：JTL 中全部样本（含升压、降压）；
-  稳态：活跃线程数 grpThreads 等于设定线程数的时间段（所有线程都在发请求），用于比较两种实现。
+统计区间（列名前缀 steady_）：
+  持续时间 ≥ 240 秒的测试：固定取开始后第 60～240 秒（--fixed-window，排除升压和前期波动）；
+  其他测试（第 1 轮 60 秒测试、恢复检查）：活跃线程数 grpThreads 等于设定线程数的时间段（所有线程都在发请求）。
+  另给出“全程”口径：JTL 中全部样本（含升压、降压）。
+测试名：<实现>-<读写>-<阶段>-t<线程数>，实现 jpa=MySQL 版，mongo=MongoDB 版，mongoj=MongoDB 版且写关注 j:true。
 写测试另核对：成功（HTTP 201）请求数 == 数据库新增行数。
 
 用法：python3 tools/analyze_jtl.py <轮次目录> --out <输出目录>
@@ -20,8 +22,25 @@ import re
 import sys
 from collections import Counter
 
-NAME_RE = re.compile(r"^(jpa|mongo)-(read|write)-(warmup|load|stress|recovery)-t(\d+)$")
-PHASE_ORDER = {"warmup": 0, "load": 1, "stress": 2, "recovery": 3}
+NAME_RE = re.compile(r"^(jpa|mongo|mongoj)-(read|write)-(warmup|load|stress|recovery\d*|main|sweep|overload|pool\d+)-t(\d+)$")
+PHASE_ORDER = {"warmup": 0, "load": 1, "main": 1, "sweep": 1, "stress": 2, "overload": 2, "recovery": 3}
+FIXED_WINDOW = None  # (起点秒, 终点秒)，由 --fixed-window 设置
+
+
+def phase_order(phase):
+    if phase.startswith("recovery"):
+        return 3  # recovery600 等：过载 600 线程之后的恢复检查
+    return PHASE_ORDER.get(phase, 1)
+
+
+def run_duration(run_dir):
+    try:
+        for line in open(os.path.join(run_dir, "params.txt"), encoding="utf-8"):
+            if line.startswith("duration="):
+                return int(line.split("=", 1)[1])
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def percentile(sorted_values, p):
@@ -87,18 +106,25 @@ def analyze_run(run_dir, name):
     t0 = min(s["ts"] for s in samples)
     t1 = max(s["ts"] for s in samples)
     full = stats(samples, t1 - t0)
-    steady_samples = [s for s in samples if s["grp"] == threads]
-    if steady_samples:
-        s0 = min(s["ts"] for s in steady_samples)
-        s1 = max(s["ts"] for s in steady_samples)
-        steady = stats([s for s in samples if s0 <= s["ts"] <= s1], s1 - s0)
+    duration = run_duration(run_dir)
+    if FIXED_WINDOW and duration is not None and duration >= FIXED_WINDOW[1]:
+        s0, s1 = t0 + FIXED_WINDOW[0] * 1000, t0 + FIXED_WINDOW[1] * 1000
+        window_name = "%d-%ds" % FIXED_WINDOW
+        steady = stats([s for s in samples if s0 <= s["ts"] < s1], s1 - s0)
     else:
-        s0 = s1 = None
-        steady = {k: float("nan") for k in full}
+        window_name = "all-threads-active"
+        steady_samples = [s for s in samples if s["grp"] == threads]
+        if steady_samples:
+            s0 = min(s["ts"] for s in steady_samples)
+            s1 = max(s["ts"] for s in steady_samples)
+            steady = stats([s for s in samples if s0 <= s["ts"] <= s1], s1 - s0)
+        else:
+            s0 = s1 = None
+            steady = {k: float("nan") for k in full}
     codes = Counter(s["code"] for s in samples)
     failures = Counter(s["message"][:80] for s in samples if not s["success"])
     row = {"impl": impl, "op": op, "phase": phase, "threads": threads,
-           "start_ms": t0, "end_ms": t1, "steady_start_ms": s0, "steady_end_ms": s1}
+           "start_ms": t0, "end_ms": t1, "stat_window": window_name, "steady_start_ms": s0, "steady_end_ms": s1}
     row.update({"full_" + k: v for k, v in full.items()})
     row.update({"steady_" + k: v for k, v in steady.items()})
     row["response_codes"] = " ".join("%s:%d" % kv for kv in sorted(codes.items()))
@@ -124,7 +150,12 @@ def main():
     p.add_argument("round_dir")
     p.add_argument("--out", required=True)
     p.add_argument("--name", default=None, help="输出文件名前缀，默认用轮次目录名")
+    p.add_argument("--fixed-window", default=None, help="如 60:240：持续时间不少于终点的测试固定统计这一区间（秒）")
     args = p.parse_args()
+    global FIXED_WINDOW
+    if args.fixed_window:
+        a, b = args.fixed_window.split(":")
+        FIXED_WINDOW = (int(a), int(b))
     name = args.name or os.path.basename(os.path.normpath(args.round_dir))
     rows = []
     for d in sorted(os.listdir(args.round_dir)):
@@ -135,7 +166,7 @@ def main():
                 rows.append(r)
                 print("analyzed %-28s samples=%-7d steady tps=%-8s p95=%s" % (
                     d, r["full_samples"], r["steady_throughput"], r["steady_p95_ms"]), file=sys.stderr)
-    rows.sort(key=lambda r: (r["op"], PHASE_ORDER[r["phase"]], r["threads"], r["impl"]))
+    rows.sort(key=lambda r: (r["op"], phase_order(r["phase"]), r["phase"], r["threads"], r["impl"]))
     os.makedirs(args.out, exist_ok=True)
     fields = list(rows[0].keys())
     with open(os.path.join(args.out, "jtl-summary-%s.csv" % name), "w", newline="", encoding="utf-8") as f:
@@ -144,10 +175,10 @@ def main():
         w.writerows(rows)
 
     lines = ["# JTL 统计（%s）" % name, "",
-             "稳态 = 所有线程都在运行的时间段；全程 = 含升压/降压的全部样本。时间单位毫秒。", ""]
+             "统计区间：240 秒测试取第 60～240 秒，其余取所有线程都在运行的时段；全程 = 含升压/降压的全部样本。时间单位毫秒。", ""]
     for op, title in (("read", "查询 GET /api/logs"), ("write", "写入 POST /api/logs")):
         lines += ["## " + title, "",
-                  "| 阶段 | 线程 | 实现 | 稳态吞吐(次/秒) | 平均(ms) | P50 | P90 | P95 | P99 | 最大 | 错误率 | 全程样本 | 入库核对 |",
+                  "| 阶段 | 线程 | 实现 | 区间吞吐(次/秒) | 平均(ms) | P50 | P90 | P95 | P99 | 最大 | 错误率 | 全程样本 | 入库核对 |",
                   "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
         for r in rows:
             if r["op"] != op:
