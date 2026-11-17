@@ -51,6 +51,9 @@ services:
       MYSQL_DATABASE: lab4_log
       # 连接池最大连接数（默认 100；连接池调优时改为 25/50）
       LOGDEMO_POOL_MAXSIZE: ${POOL_SIZE:-100}
+      # 每 5 分钟对空闲连接做一次保活。经服务名 lab_mysql（Swarm 虚拟 IP，IPVS 转发）的空闲连接约 15 分钟后会被静默断开，
+      # 连接池关闭这些连接时 MySQL 收不到，旧会话会一直占着连接数，曾把共用 MySQL 的 300 个连接占满（11-17 加上本项后不再出现）
+      SPRING_DATASOURCE_HIKARI_KEEPALIVETIME: "300000"
     command:
       - --spring.config.additional-location=file:/run/secrets/lab4-jpa.properties
     deploy:
