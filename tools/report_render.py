@@ -231,7 +231,7 @@ table { border-collapse: collapse; margin: 0 auto 3mm; font-size: 8.5pt; line-he
 thead th { border-top: 1.2pt solid #000; border-bottom: 0.6pt solid #000; padding: 1.2mm 2mm; font-weight: bold; }
 tbody td { padding: 0.9mm 2mm; text-align: center; }
 tbody tr:last-child td { border-bottom: 1.2pt solid #000; }
-.tbl { break-inside: avoid; page-break-inside: avoid; display: block; }  /* 表题与表格不分页 */
+.tbl { break-inside: avoid; page-break-inside: avoid; display: inline-block; width: 100%; }  /* 表题与表格不分页：Chrome 打印时不拆分 inline-block */
 .pagebreak { break-after: page; }
 """
 
