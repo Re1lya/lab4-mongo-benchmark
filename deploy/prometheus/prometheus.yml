@@ -4,9 +4,14 @@
 #   docker exec <prometheus 容器> promtool check config /etc/prometheus/prometheus.yml
 #   docker kill -s HUP <prometheus 容器>      # 热加载，不重启
 global:
-  scrape_interval: 2s
-  evaluation_interval: 5s
+  scrape_interval: 1s      # 老师 11-19 更新：采集间隔 1s（原 2s）
+  evaluation_interval: 2s  # 老师 11-19 更新：规则计算间隔 2s（原 5s）
   scrape_timeout: 1s
+
+# 记录规则（rules/recording.yml）：其中 CPU 使用率 node:cpu_usage_percent 按老师 11-19 的更新由 5 分钟平均改为 2 秒平均，
+# 规则组每 2 秒计算一次。
+rule_files:
+  - "rules/*.yml"
 
 scrape_configs:
   # 5 台服务器的 node-exporter（Swarm 全局服务，端口 9100）：CPU、内存、磁盘、网络

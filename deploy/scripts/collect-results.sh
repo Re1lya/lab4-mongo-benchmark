@@ -12,6 +12,6 @@ DEST=${2:-results/$ROUND}
 mkdir -p "$DEST"
 
 "$LAB_SSH" "$HOST" "cd /root/lab4/results/$ROUND && for d in */; do [ -f \"\$d/samples.jtl\" ] && gzip -9 -k -f \"\$d/samples.jtl\"; done; \
-  tar -cf - */samples.jtl.gz */params.txt */start.txt */end.txt \$(ls */db-rows.txt warmups.log choice.txt 2>/dev/null)" 2>/dev/null \
+  tar -cf - */samples.jtl.gz */params.txt */start.txt */end.txt \$(ls */db-rows.txt warmups.log choice.txt probe.log 2>/dev/null)" 2>/dev/null \
   | tar -xf - -C "$DEST"
 echo "collected into $DEST: $(ls -d "$DEST"/*/ | wc -l | tr -d ' ') runs, $(du -sh "$DEST" | cut -f1)"

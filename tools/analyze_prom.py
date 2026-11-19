@@ -134,6 +134,12 @@ def summarize_run(series, run):
         row[name + "_iowait_pct"] = iow
         mem = select(series, "node_memory_MemAvailable_bytes", instance=host)
         row[name + "_mem_avail_min_mb"] = round(min(v for _, v in window(mem[0][1], t0, t1)) / 1048576) if mem and window(mem[0][1], t0, t1) else None
+    # 老师 11-19 更新后的 CPU 使用率：记录规则 node:cpu_usage_percent（每 1 秒采集、每 2 秒按 2 秒窗口计算）。
+    # 统计区间内取平均值和最大值；旧数据（每 2 秒采集、规则为 5 分钟平均）没有这一项。
+    for host, name in HOSTS.items():
+        vals = [v for _, v in window(merged(series, "node:cpu_usage_percent", instance=host), t0, t1) if v == v]
+        row[name + "_cpu2s_avg"] = round(sum(vals) / len(vals), 1) if vals else None
+        row[name + "_cpu2s_max"] = round(max(vals), 1) if vals else None
     for name in ("CDWY2", "CDWY5"):  # 数据库服务器的磁盘写入
         host = [h for h, n in HOSTS.items() if n == name][0]
         wb = select(series, "node_disk_written_bytes_total", instance=host, device="vda")
@@ -183,6 +189,9 @@ def summarize_run(series, run):
     if tps:
         row["app_host_cpu_ms_per_req"] = round(CORES * row["CDWY1_cpu_pct"] / 100 * 1000 / tps, 3)
         row["db_host_cpu_ms_per_req"] = round(CORES * row[db + "_cpu_pct"] / 100 * 1000 / tps, 3)
+        if row.get("CDWY1_cpu2s_avg") is not None and row.get(db + "_cpu2s_avg") is not None:
+            row["app_host_cpu2s_ms_per_req"] = round(CORES * row["CDWY1_cpu2s_avg"] / 100 * 1000 / tps, 3)
+            row["db_host_cpu2s_ms_per_req"] = round(CORES * row[db + "_cpu2s_avg"] / 100 * 1000 / tps, 3)
     return row
 
 
@@ -191,9 +200,12 @@ def timeseries(series, run):
     job = JOB[impl]
     out = {"run": "%s-%s-%s-t%s" % (impl, run["op"], run["phase"], run["threads"]),
            "window_utc_ms": [t0, t1], "steady_utc_ms": [int(run["steady_start_ms"]), int(run["steady_end_ms"])],
-           "note": "cpu_pct 为每个抓取间隔（2 秒）的整机 CPU 使用率；其余为 Prometheus 原始样本", "series": {}}
+           "note": "cpu_pct 为相邻两次抓取之间的整机 CPU 使用率；cpu2s_pct 为记录规则 node:cpu_usage_percent（2 秒平均）；其余为 Prometheus 原始样本", "series": {}}
     for host, name in HOSTS.items():
         out["series"][name + "_cpu_pct"] = cpu_timeseries(series, host, t0, t1)
+        rule = [[t, round(v, 1)] for t, v in window(merged(series, "node:cpu_usage_percent", instance=host), t0, t1) if v == v]
+        if rule:
+            out["series"][name + "_cpu2s_pct"] = rule  # 记录规则 node:cpu_usage_percent（2 秒平均，每 2 秒一个点）
     for metric, key in (("process_cpu_usage", "app_process_cpu"), ("jvm_threads_live_threads", "app_live_threads"),
                         ("hikaricp_connections_active" if impl == "jpa" else "mongodb_driver_pool_checkedout", "pool_in_use"),
                         ("hikaricp_connections_pending" if impl == "jpa" else "mongodb_driver_pool_waitqueuesize", "pool_waiting")):
@@ -215,9 +227,14 @@ def main():
     runs = list(csv.DictReader(open(args.jtl_summary, encoding="utf-8")))
     rows = []
     for run in runs:
-        if not run["steady_start_ms"]:
-            continue
-        rows.append(summarize_run(series, run))
+        full_run = not run["steady_start_ms"]
+        if full_run:
+            # 没有“全部线程都在运行”时段的测试（逐级加压中未通过的一级）：按整次测试统计，用来查看压测机和服务端当时的状态
+            run = dict(run, steady_start_ms=run["start_ms"], steady_end_ms=run["end_ms"])
+        row = summarize_run(series, run)
+        if full_run:
+            row["window"] = "full-run"
+        rows.append(row)
         run_dir = os.path.join(args.round_dir, "%s-%s-%s-t%s" % (run["impl"], run["op"], run["phase"], run["threads"]))
         if os.path.isdir(run_dir):
             with open(os.path.join(run_dir, "monitor.json"), "w", encoding="utf-8") as f:

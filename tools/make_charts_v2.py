@@ -138,6 +138,95 @@ def main_resources(stats, out):
     save(fig, out, "main-resources.png")
 
 
+def phase3_resources(stats, out):
+    """第三阶段复测（新监控配置）的资源开销：CPU 使用率取记录规则 node:cpu_usage_percent（2 秒平均）在统计区间内的均值。"""
+    prom = [x for x in rows(os.path.join(stats, "prom-summary-n1.csv")) if x["phase"] == "main"]
+    if not prom or not prom[0].get("CDWY1_cpu2s_avg"):
+        return
+    val = {}
+    for x in prom:
+        db = "CDWY2" if x["impl"] == "jpa" else "CDWY5"
+        val[(x["op"], x["impl"], "app")] = float(x["CDWY1_cpu2s_avg"])
+        val[(x["op"], x["impl"], "db")] = float(x[db + "_cpu2s_avg"])
+        val[(x["op"], x["impl"], "iops")] = float(x[db + "_disk_write_iops"])
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.9))
+    panels = (("app", "应用服务器 CPU 使用率", "%", "{:.0f}%", ("read", "write")),
+              ("db", "数据库服务器 CPU 使用率", "%", "{:.0f}%", ("read", "write")),
+              ("iops", "写入时数据库服务器每秒写盘次数", "次/秒", "{:,.0f}", ("write",)))
+    for ax, (kind, title, unit, fmt, ops) in zip(axes, panels):
+        groups = [("查询" if op == "read" else "写入", {i: val.get((op, i, kind)) for i in ("jpa", "mongo", "mongoj")})
+                  for op in ops]
+        grouped_bars(ax, groups, ["jpa", "mongo", "mongoj"], kind, None, fmt, unit)
+        if kind != "iops":
+            ax.set_ylim(0, 115)
+            ax.set_yticks([0, 25, 50, 75, 100])
+        ax.set_title(title, loc="left", fontsize=10)
+    legend_top(fig, axes)
+    fig.suptitle("第三阶段复测的资源开销（CPU 使用率为 2 秒平均在统计区间内的均值）", x=0.01, y=1.14, ha="left",
+                 fontsize=13, fontweight="bold", color=INK)
+    fig.tight_layout(w_pad=2.5)
+    save(fig, out, "phase3-resources.png")
+
+
+def maxload_cpu(stats, out):
+    """最多线程数下持续压测时各服务器的 CPU 使用率曲线（记录规则 node:cpu_usage_percent，2 秒平均）。
+    每个面板一种实现（颜色同其他图：MySQL 蓝、MongoDB 橙），服务器用线型区分并在线尾直接标注。"""
+    import json
+    base = os.path.join(os.path.dirname(os.path.normpath(stats)), "x1")
+    if not os.path.isdir(base):
+        return
+    runs = {}
+    for d in sorted(os.listdir(base)):
+        m = __import__("re").match(r"^(jpa|mongo)-(read|write)-maxload-t(\d+)$", d)
+        p = os.path.join(base, d, "monitor.json")
+        if m and os.path.exists(p):
+            runs[(m.group(2), m.group(1))] = (int(m.group(3)), json.load(open(p, encoding="utf-8")))
+    if not runs:
+        return
+    fig, axes = plt.subplots(2, 2, figsize=(11, 6.6), sharey=True)
+    for ri, op in enumerate(("read", "write")):
+        for ci, impl in enumerate(("jpa", "mongo")):
+            ax = axes[ri][ci]
+            if (op, impl) not in runs:
+                ax.set_visible(False)
+                continue
+            t, mon = runs[(op, impl)]
+            t0 = mon["window_utc_ms"][0]
+            s0, s1 = [(x - t0) / 1000.0 for x in mon["steady_utc_ms"]]
+            ax.axvspan(s0, s1, color=GRID, alpha=0.45, lw=0, zorder=0)
+            ax.text((s0 + s1) / 2, 104, "统计区间", ha="center", va="bottom", fontsize=8, color=MUTED)
+            db = "CDWY2" if impl == "jpa" else "CDWY5"
+            lines = (("CDWY1_cpu2s_pct", "应用服务器", SERIES[impl], "-"),
+                     (db + "_cpu2s_pct", "数据库服务器", SERIES[impl], "--"),
+                     ("CDWY3_cpu2s_pct", "压测机", MUTED, ":"))
+            for key, name, color, style in lines:
+                pts = mon["series"].get(key) or []
+                if not pts:
+                    continue
+                xs = [(p[0] - t0) / 1000.0 for p in pts]
+                ys = [p[1] for p in pts]
+                ax.plot(xs, ys, color=color, lw=2 if style != ":" else 1.6, ls=style, label=name, zorder=3)
+                ax.annotate(name, (xs[-1], ys[-1]), xytext=(5, 0), textcoords="offset points", va="center",
+                            fontsize=8.5, color=INK2)
+            ax.set_ylim(0, 112)
+            ax.set_yticks([0, 25, 50, 75, 100])
+            ax.set_xlim(0, max(260, s1 + 20))
+            ax.set_title("%s %s：%d 线程" % (SHORT[impl], "查询" if op == "read" else "写入", t), loc="left", fontsize=10)
+            if ci == 0:
+                ax.set_ylabel("CPU 使用率（%）")
+            if ri == 1:
+                ax.set_xlabel("测试开始后的秒数")
+            ax.grid(True, axis="y")
+    handles = [plt.Line2D([], [], color=INK2, lw=2, ls="-", label="应用服务器（CDWY1）"),
+               plt.Line2D([], [], color=INK2, lw=2, ls="--", label="数据库服务器（MySQL 为 CDWY2，MongoDB 为 CDWY5）"),
+               plt.Line2D([], [], color=MUTED, lw=1.6, ls=":", label="压测机（CDWY3）")]
+    fig.legend(handles=handles, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.03), fontsize=9.5, labelcolor=INK)
+    fig.suptitle("最多线程数下持续压测：各服务器 CPU 使用率（2 秒平均，颜色区分实现：MySQL 蓝、MongoDB 橙）", x=0.01, y=1.08,
+                 ha="left", fontsize=12.5, fontweight="bold", color=INK)
+    fig.tight_layout(h_pad=2.2, w_pad=3)
+    save(fig, out, "maxload-cpu.png")
+
+
 def level_lines(ax, data, levels, key, title, unit, fmt="{:.0f}"):
     xs = list(range(len(levels)))
     ends = {}
@@ -197,6 +286,8 @@ def main():
     out = os.path.join(args.stats_dir, "charts")
     main_comparison(args.stats_dir, out)
     main_resources(args.stats_dir, out)
+    phase3_resources(args.stats_dir, out)
+    maxload_cpu(args.stats_dir, out)
     # 并发量调优缺少的两档取主对比：查询 50 线程取第 2 轮（数据库状态与并发量调优的查询测试相同：MongoDB 库中留有
     # 上一项写入的日志、MySQL 为预置数据），写入 100 线程取第 1 轮（写入测试前都会重置数据库）
     main_extra = ([r for r in rows(os.path.join(args.stats_dir, "jtl-summary-m2.csv")) if r["op"] == "read"]

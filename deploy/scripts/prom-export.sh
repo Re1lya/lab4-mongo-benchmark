@@ -6,7 +6,7 @@
 #   1) 复制与时间段重叠的 TSDB 数据块、WAL（预写日志）和 head 块到快照目录（不改动正在运行的 Prometheus）；
 #   2) 用同一镜像里的 promtool 离线读取快照：promtool tsdb dump；
 #   3) 删除快照。
-# 输出每行一个样本：{标签...} 值 时间戳(毫秒)。
+# 输出每行一个样本：{标签...} 值 时间戳(毫秒)。另导出记录规则 node:cpu_usage_percent（老师 11-19 更新后的 2 秒平均 CPU 使用率）。
 set -euo pipefail
 FROM=$1; TO=$2; OUT=$3
 SRC=/var/lib/docker/volumes/lab_lab3-prometheus-data/_data
@@ -32,6 +32,6 @@ APP='{__name__=~"up|process_cpu_usage|system_cpu_usage|jvm_threads_live_threads|
 # 镜像默认以 nobody 运行，快照目录属于 root，这里用 root 运行临时容器（只读写快照副本）
 docker run --rm --user 0:0 --memory 768m -v "$SNAP":/data --entrypoint /bin/promtool "$IMG" \
   tsdb dump --sandbox-dir-root=/data/.sandbox --min-time="$from_ms" --max-time="$to_ms" \
-  --match="$NODE" --match="$APP" /data | gzip > "$OUT"
+  --match="$NODE" --match="$APP" --match='{__name__="node:cpu_usage_percent"}' /data | gzip > "$OUT"
 rm -rf "$SNAP"
 echo "exported $(zcat "$OUT" | wc -l) samples to $OUT"

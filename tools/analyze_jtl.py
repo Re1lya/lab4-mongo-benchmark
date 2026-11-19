@@ -22,8 +22,8 @@ import re
 import sys
 from collections import Counter
 
-NAME_RE = re.compile(r"^(jpa|mongo|mongoj)-(read|write)-(warmup|load|stress|recovery\d*|main|sweep|overload|pool\d+)-t(\d+)$")
-PHASE_ORDER = {"warmup": 0, "load": 1, "main": 1, "sweep": 1, "stress": 2, "overload": 2, "recovery": 3}
+NAME_RE = re.compile(r"^(jpa|mongo|mongoj)-(read|write)-(warmup|load|stress|recovery\d*|main|sweep|overload|pool\d+|probe|maxload)-t(\d+)$")
+PHASE_ORDER = {"warmup": 0, "load": 1, "main": 1, "sweep": 1, "probe": 2, "stress": 2, "overload": 2, "maxload": 2, "recovery": 3}
 FIXED_WINDOW = None  # (起点秒, 终点秒)，由 --fixed-window 设置
 
 
@@ -74,6 +74,7 @@ def stats(samples, window_ms):
         # 正常时远小于 1 ms；明显变大说明压测机（CPU 等）成了瓶颈，结果不能代表被测系统。
         "threads_avg": round(threads, 1),
         "client_gap_ms": round(threads / tps * 1000 - avg, 2) if n and tps > 0 else float("nan"),
+        "bytes_avg": round(sum(s["bytes"] for s in samples) / n) if n else float("nan"),  # 平均响应大小（字节）
     }
 
 
@@ -100,6 +101,7 @@ def load_samples(run_dir):
                 "success": row["success"] == "true",
                 "message": row.get("failureMessage", "") or "",
                 "grp": int(row["grpThreads"]),
+                "bytes": int(row.get("bytes") or 0),
             })
     return out
 
@@ -131,7 +133,8 @@ def analyze_run(run_dir, name):
     codes = Counter(s["code"] for s in samples)
     failures = Counter(s["message"][:80] for s in samples if not s["success"])
     row = {"impl": impl, "op": op, "phase": phase, "threads": threads,
-           "start_ms": t0, "end_ms": t1, "stat_window": window_name, "steady_start_ms": s0, "steady_end_ms": s1}
+           "start_ms": t0, "end_ms": t1, "stat_window": window_name, "steady_start_ms": s0, "steady_end_ms": s1,
+           "max_threads": max(s["grp"] for s in samples)}  # JMeter 同时运行的线程数最大值
     row.update({"full_" + k: v for k, v in full.items()})
     row.update({"steady_" + k: v for k, v in steady.items()})
     row["response_codes"] = " ".join("%s:%d" % kv for kv in sorted(codes.items()))
