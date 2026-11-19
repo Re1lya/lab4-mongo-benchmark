@@ -1,0 +1,15 @@
+jpa read t=400 max_threads=400 samples=313224 errors=0 window_s=90 tps=2789.8 avg_ms=143.3 gap_ms=0.08 pass=1
+jpa read t=800 max_threads=643 samples=269260 errors=0 window_s=0 tps=0.0 avg_ms=nan gap_ms=nan pass=0
+mongo read t=400 max_threads=400 samples=191390 errors=0 window_s=90 tps=1729.2 avg_ms=231.2 gap_ms=0.16 pass=1
+mongo read t=800 max_threads=800 samples=376396 errors=0 window_s=90 tps=2948.9 avg_ms=271.2 gap_ms=0.08 pass=1
+mongo read t=1200 max_threads=573 samples=487139 errors=0 window_s=0 tps=0.0 avg_ms=nan gap_ms=nan pass=0
+jpa write t=400 max_threads=400 samples=386375 errors=0 window_s=90 tps=3624.9 avg_ms=110.3 gap_ms=0.03 pass=1
+jpa write t=800 max_threads=800 samples=475247 errors=0 window_s=90 tps=3743.3 avg_ms=213.6 gap_ms=0.10 pass=1
+jpa write t=1200 max_threads=1200 samples=540068 errors=0 window_s=90 tps=3603.7 avg_ms=333.1 gap_ms=-0.14 pass=1
+jpa write t=1600 max_threads=1600 samples=633585 errors=0 window_s=90 tps=3786.6 avg_ms=422.5 gap_ms=0.05 pass=1
+jpa write t=2000 max_threads=2000 samples=701332 errors=0 window_s=90 tps=3720.5 avg_ms=536.9 gap_ms=0.66 pass=1
+mongo write t=400 max_threads=400 samples=726797 errors=0 window_s=90 tps=6406.7 avg_ms=62.4 gap_ms=0.03 pass=1
+mongo write t=800 max_threads=800 samples=933958 errors=0 window_s=90 tps=6271.6 avg_ms=127.5 gap_ms=0.10 pass=1
+mongo write t=1200 max_threads=1200 samples=1056582 errors=0 window_s=90 tps=6328.4 avg_ms=189.5 gap_ms=0.13 pass=1
+mongo write t=1600 max_threads=1600 samples=1191439 errors=0 window_s=90 tps=6270.8 avg_ms=255.1 gap_ms=0.07 pass=1
+mongo write t=2000 max_threads=2000 samples=1306443 errors=0 window_s=90 tps=6217.8 avg_ms=321.4 gap_ms=0.23 pass=1
