@@ -1,0 +1,34 @@
+{
+  "POST /api/logs" : {
+    "transaction" : "POST /api/logs",
+    "sampleCount" : 1173679,
+    "errorCount" : 0,
+    "errorPct" : 0.0,
+    "meanResTime" : 15.285871179428375,
+    "medianResTime" : 13.0,
+    "minResTime" : 0.0,
+    "maxResTime" : 260.0,
+    "pct1ResTime" : 24.0,
+    "pct2ResTime" : 32.0,
+    "pct3ResTime" : 58.0,
+    "throughput" : 6519.968002310944,
+    "receivedKBytesPerSec" : 5498.324730366696,
+    "sentKBytesPerSec" : 0.0
+  },
+  "Total" : {
+    "transaction" : "Total",
+    "sampleCount" : 1173679,
+    "errorCount" : 0,
+    "errorPct" : 0.0,
+    "meanResTime" : 15.285871179428375,
+    "medianResTime" : 13.0,
+    "minResTime" : 0.0,
+    "maxResTime" : 260.0,
+    "pct1ResTime" : 24.0,
+    "pct2ResTime" : 32.0,
+    "pct3ResTime" : 58.0,
+    "throughput" : 6519.968002310944,
+    "receivedKBytesPerSec" : 5498.324730366696,
+    "sentKBytesPerSec" : 0.0
+  }
+}

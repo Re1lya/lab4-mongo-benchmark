@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>实验四 JMeter HTML 报告</title>
+<style>
+body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 24px; color: #222; }
+table { border-collapse: collapse; } th, td { border-bottom: 1px solid #ddd; padding: 6px 10px; text-align: center; }
+th { background: #f4f4f4; } p { max-width: 860px; }
+</style></head><body>
+<h2>实验四 JMeter HTML 报告（主对比、j:true 与持续压测）</h2>
+<p>由 JMeter 5.6.3 的报告生成器（<code>jmeter -g</code>）生成。每份只包含该测试统计区间（第 60～240 秒）内开始的请求，
+与实验报告的统计口径相同；下表的吞吐量与响应时间取自 <code>results/统计与图表/jtl-summary-*.csv</code>。完整的原始数据见各测试目录的
+<code>samples.jtl.gz</code>。</p>
+<table><tr><th>测试</th><th>实现</th><th>操作</th><th>线程</th><th>吞吐（次/秒）</th><th>平均（ms）</th><th>P95（ms）</th><th>P99（ms）</th><th>HTML 报告</th></tr>
+<tr><td>主对比</td><td>MySQL 版</td><td>查询</td><td>50</td><td>3,289</td><td>15.1</td><td>52</td><td>89</td><td><a href='n1/jpa-read-main-t50/index.html'>打开</a></td></tr>
+<tr><td>主对比</td><td>MongoDB 版</td><td>查询</td><td>50</td><td>3,684</td><td>13.5</td><td>23</td><td>33</td><td><a href='n1/mongo-read-main-t50/index.html'>打开</a></td></tr>
+<tr><td>主对比</td><td>MySQL 版</td><td>写入</td><td>100</td><td>3,596</td><td>27.8</td><td>47</td><td>120</td><td><a href='n1/jpa-write-main-t100/index.html'>打开</a></td></tr>
+<tr><td>主对比</td><td>MongoDB 版</td><td>写入</td><td>100</td><td>6,520</td><td>15.3</td><td>32</td><td>58</td><td><a href='n1/mongo-write-main-t100/index.html'>打开</a></td></tr>
+<tr><td>主对比</td><td>MongoDB 版（j:true）</td><td>写入</td><td>100</td><td>5,679</td><td>17.6</td><td>26</td><td>35</td><td><a href='n1/mongoj-write-main-t100/index.html'>打开</a></td></tr>
+<tr><td>最多线程数下持续压测</td><td>MySQL 版</td><td>查询</td><td>400</td><td>2,313</td><td>173.0</td><td>415</td><td>623</td><td><a href='x1/jpa-read-maxload-t400/index.html'>打开</a></td></tr>
+<tr><td>最多线程数下持续压测</td><td>MongoDB 版</td><td>查询</td><td>400</td><td>3,430</td><td>116.5</td><td>240</td><td>347</td><td><a href='x1/mongo-read-maxload-t400/index.html'>打开</a></td></tr>
+<tr><td>最多线程数下持续压测</td><td>MySQL 版</td><td>写入</td><td>2000</td><td>3,581</td><td>558.4</td><td>758</td><td>912</td><td><a href='x1/jpa-write-maxload-t2000/index.html'>打开</a></td></tr>
+<tr><td>最多线程数下持续压测</td><td>MongoDB 版</td><td>写入</td><td>2000</td><td>5,719</td><td>349.4</td><td>501</td><td>582</td><td><a href='x1/mongo-write-maxload-t2000/index.html'>打开</a></td></tr>
+</table></body></html>
