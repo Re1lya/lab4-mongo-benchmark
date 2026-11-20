@@ -1,3 +1,0 @@
-rows_before=100000
-rows_after=1679210
-inserted=1579210
