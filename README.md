@@ -2,7 +2,7 @@
 
 基于 Spring Data JPA 与 Spring Data MongoDB 的对照实现。同一套日志模型、接口、请求数据和测试方法，分别接入 MySQL 9.2 和 MongoDB 7.0，在 5 台 2 核服务器（Docker Swarm）上用 JMeter 做负载测试和压力测试，并用 Prometheus 监控。
 
-测试分三个阶段：第 1 轮是 10～400 线程的梯度探索；第二阶段固定参数（查询 50 线程、写入 100 线程，每次 240 秒，统计第 60～240 秒）做 3 轮主对比，并补充 MongoDB j:true 持久性对照、并发量调优、连接池调优和 600～1000 线程的过载与恢复；第三阶段按老师 11-19 更新的 Prometheus 配置（每 1 秒采集，CPU 使用率取 2 秒平均）复测主对比与 j:true，并借鉴其他组的做法逐级加压，找出两种实现都能让全部线程同时运行的最高线程数（查询 400、写入 2000），在该线程数下持续压测。
+测试按课程 11-19 更新的 Prometheus 配置（每 1 秒采集，CPU 使用率取 2 秒平均）进行：查询 50 线程、写入 100 线程的主对比和 MongoDB j:true 写关注对照；借鉴其他组的做法逐级加压，找出两种实现都能让全部线程同时运行的最高线程数（查询 400、写入 2000），并在该线程数下持续压测、做恢复检查。
 
 > 结论见[实验报告](report/)；本页只做导航。Gitee 提交仓库：[W2097382371/lab4-mongo-benchmark](https://gitee.com/W2097382371/lab4-mongo-benchmark)（只含指导书要求的提交材料）。
 
@@ -22,6 +22,7 @@
 | 部署与测试脚本 | [deploy/](deploy/)：Swarm 部署文件、Prometheus 配置、装数/核对/压测/导出脚本 |
 | 数据生成与统计工具 | [tools/](tools/) |
 | 原始 JTL、Prometheus 监控数据与统计图表 | [results/](results/) |
+| JMeter HTML 报告（主对比、j:true 与持续压测；下载后用浏览器打开 `index.html`） | [results/jmeter-html/](results/jmeter-html/) |
 
 ## 接口
 
