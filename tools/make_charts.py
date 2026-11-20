@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""实验四图表：读/写的吞吐量与 P95、各服务器 CPU、数据库磁盘写入、400 线程压力与恢复的时间曲线。
+"""实验四图表：主对比、主对比的资源开销、最多同时运行线程数逐级加压、最多线程数下持续压测的 CPU 曲线。
 
-用法：python3 tools/make_charts.py <统计目录> <轮次目录> --name r1
-  <统计目录> 中需要 jtl-summary-<name>.csv、prom-summary-<name>.csv；图片输出到 <统计目录>/charts/。
-需要 matplotlib（报告构建环境安装即可，服务器上不需要）。
+用法：python3 tools/make_charts.py results/统计与图表
+需要同目录下的 jtl-summary-n1.csv、jtl-summary-probe.csv、prom-summary-n1.csv，以及 results/x1/*/monitor.json
+（由 tools/analyze_prom.py 生成）。缺哪个就跳过对应的图。
 """
 import argparse
 import csv
-import gzip
 import os
 from collections import defaultdict
 
@@ -16,26 +15,17 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-# 配色与版式（dataviz 参考色板，已用 validate_palette.js 校验：蓝/橙两色全部通过）
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK2 = "#52514e"
-MUTED = "#898781"
-GRID = "#e1e0d9"
-AXIS = "#c3c2b7"
-BAND = "#f3f2ee"
-SERIES = {"jpa": "#2a78d6", "mongo": "#eb6834"}
-LABEL = {"jpa": "MySQL（Spring Data JPA）", "mongo": "MongoDB（Spring Data MongoDB）"}
-SHORT = {"jpa": "MySQL", "mongo": "MongoDB"}
-LEVELS = [10, 25, 50, 100, 200, 300, 400]
+SURFACE = "#fcfcfb"; INK = "#0b0b0b"; INK2 = "#52514e"; MUTED = "#898781"; GRID = "#e1e0d9"; AXIS = "#c3c2b7"
+# 已用 validate_palette.js 校验（--pairs all 通过）；青绿色对比度不足 3:1，因此所有柱都标数值、报告另附表格
+SERIES = {"jpa": "#2a78d6", "mongo": "#eb6834", "mongoj": "#1baf7a"}
+LABEL = {"jpa": "MySQL（Spring Data JPA）", "mongo": "MongoDB（Spring Data MongoDB，w:1）", "mongoj": "MongoDB（w:1 + j:true）"}
+SHORT = {"jpa": "MySQL", "mongo": "MongoDB", "mongoj": "MongoDB j:true"}
 
 plt.rcParams.update({
-    "font.family": ["PingFang SC", "Hiragino Sans GB", "Arial Unicode MS"],
-    "font.size": 10,
+    "font.family": ["PingFang SC", "Hiragino Sans GB", "Arial Unicode MS"], "font.size": 10,
     "axes.facecolor": SURFACE, "figure.facecolor": SURFACE, "savefig.facecolor": SURFACE,
-    "axes.edgecolor": AXIS, "axes.linewidth": 0.8,
-    "axes.labelcolor": INK2, "xtick.color": MUTED, "ytick.color": MUTED,
-    "xtick.labelcolor": INK2, "ytick.labelcolor": INK2,
+    "axes.edgecolor": AXIS, "axes.linewidth": 0.8, "axes.labelcolor": INK2,
+    "xtick.color": MUTED, "ytick.color": MUTED, "xtick.labelcolor": INK2, "ytick.labelcolor": INK2,
     "axes.spines.top": False, "axes.spines.right": False,
     "axes.grid": True, "axes.grid.axis": "y", "grid.color": GRID, "grid.linewidth": 0.8, "grid.linestyle": "-",
     "legend.frameon": False, "axes.titlesize": 11, "axes.titleweight": "bold", "axes.titlecolor": INK,
@@ -43,220 +33,228 @@ plt.rcParams.update({
 })
 
 
-def read_csv(path):
-    return list(csv.DictReader(open(path, encoding="utf-8")))
-
-
-def fnum(v):
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
-
-
-def level_series(rows, op, impl, key):
-    """负载 + 压力两种阶段，按线程数排列（恢复检查、预热不在这里）。"""
-    vals = {}
-    for r in rows:
-        if r["op"] == op and r["impl"] == impl and r["phase"] in ("load", "stress"):
-            vals[int(r["threads"])] = fnum(r[key])
-    return [vals.get(t) for t in LEVELS]
-
-
-def style_levels(ax):
-    """x 轴用等距的线程档位；压力测试区间加浅色底，并在上方标注；最后添加末端标注。"""
-    ax.set_xticks(range(len(LEVELS)))
-    ax.set_xticklabels([str(t) for t in LEVELS])
-    ax.set_xlabel("JMeter 线程数")
-    split = LEVELS.index(200) - 0.5
-    ax.axvspan(split, len(LEVELS) - 0.5, color=BAND, zorder=0, lw=0)
-    ax.set_xlim(-0.5, len(LEVELS) - 0.5)
-    # 区间名称放在绘图区内顶端（x 用数据坐标，y 用坐标轴比例），不与标题重叠
-    tr = ax.get_xaxis_transform()
-    ax.text((split - 0.5) / 2, 0.97, "负载测试", transform=tr, ha="center", va="top", color=MUTED, fontsize=9)
-    ax.text((split + len(LEVELS) - 0.5) / 2, 0.97, "压力测试", transform=tr, ha="center", va="top", color=MUTED, fontsize=9)
-    ax.tick_params(axis="x", length=0)
-    ax.tick_params(axis="y", length=0)
-    add_end_labels(ax)
-
-
-def plot_lines(ax, xs_by_impl, ys_by_impl, end_label=True, fmt="{:.0f}"):
-    ends = {}
-    for impl in ("jpa", "mongo"):
-        xs, ys = xs_by_impl[impl], ys_by_impl[impl]
-        pts = [(x, y) for x, y in zip(xs, ys) if y is not None]
-        if not pts:
-            continue
-        px, py = zip(*pts)
-        ax.plot(px, py, color=SERIES[impl], lw=2, solid_capstyle="round", solid_joinstyle="round",
-                marker="o", ms=8, mfc=SERIES[impl], mec=SURFACE, mew=2, label=LABEL[impl], zorder=3)
-        ends[impl] = (px[-1], py[-1])
-    if end_label:
-        ax._lab4_end_labels = (ends, fmt)  # 纵轴范围确定后再决定是否标注，见 add_end_labels
-
-
-def add_end_labels(ax):
-    """末端标注：两条线末端太近（不到纵轴范围的 7%）时不标，避免文字重叠；数值见图例和表格。"""
-    ends, fmt = getattr(ax, "_lab4_end_labels", ({}, "{:.0f}"))
-    if len(ends) == 2:
-        y0, y1 = ax.get_ylim()
-        if abs(ends["jpa"][1] - ends["mongo"][1]) < 0.07 * (y1 - y0):
-            return
-    for impl, (x, y) in ends.items():
-        ax.annotate(SHORT[impl] + " " + fmt.format(y), (x, y), xytext=(6, 0),
-                    textcoords="offset points", va="center", fontsize=8.5, color=INK2)
-
-
-def level_chart(ax, rows, op, key, title, ylabel, fmt="{:.0f}", ymin0=True):
-    xs = list(range(len(LEVELS)))
-    plot_lines(ax, {"jpa": xs, "mongo": xs},
-               {impl: level_series(rows, op, impl, key) for impl in ("jpa", "mongo")}, fmt=fmt)
-    if ymin0:
-        ax.set_ylim(bottom=0)
-    ax.set_ylim(top=ax.get_ylim()[1] * 1.18)
-    ax.set_title(title, loc="left")
-    ax.set_ylabel(ylabel)
-    style_levels(ax)
+def rows(path):
+    return list(csv.DictReader(open(path, encoding="utf-8"))) if os.path.exists(path) else []
 
 
 def save(fig, out_dir, name):
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, name)
-    fig.savefig(path, dpi=200, bbox_inches="tight", pad_inches=0.15)
+    fig.savefig(os.path.join(out_dir, name), dpi=200, bbox_inches="tight", pad_inches=0.15)
     plt.close(fig)
-    print("wrote", path)
+    print("wrote", name)
 
 
-def overview(jtl, op, out_dir, op_title):
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.9))
-    level_chart(axes[0], jtl, op, "steady_throughput", "稳态吞吐量", "次/秒")
-    level_chart(axes[1], jtl, op, "steady_p95_ms", "稳态 P95 响应时间", "毫秒")
-    h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.06), fontsize=9.5, labelcolor=INK)
-    fig.suptitle(op_title, x=0.01, y=1.13, ha="left", fontsize=13, fontweight="bold", color=INK)
-    fig.tight_layout(w_pad=3)
-    save(fig, out_dir, "%s-overview.png" % op)
+def legend_top(fig, axes_with_handles, ncol=3, y=1.06):
+    handles, labels = [], []
+    for ax in axes_with_handles:
+        for h, l in zip(*ax.get_legend_handles_labels()):
+            if l not in labels:
+                handles.append(h)
+                labels.append(l)
+    fig.legend(handles, labels, loc="upper center", ncol=ncol, bbox_to_anchor=(0.5, y), fontsize=9.5, labelcolor=INK)
 
 
-def cpu_overview(prom, out_dir):
-    fig, axes = plt.subplots(2, 3, figsize=(13, 6.6), sharey=True)
-    cols = [("CDWY1_cpu_pct", "应用服务器 CDWY1"), ("DB", "数据库服务器（CDWY2 / CDWY5）"), ("CDWY3_cpu_pct", "压测机 CDWY3")]
-    for r_i, (op, op_name) in enumerate((("read", "查询"), ("write", "写入"))):
-        for c_i, (key, name) in enumerate(cols):
-            ax = axes[r_i][c_i]
-            ys = {}
-            for impl in ("jpa", "mongo"):
-                k = key if key != "DB" else ("CDWY2_cpu_pct" if impl == "jpa" else "CDWY5_cpu_pct")
-                ys[impl] = level_series(prom, op, impl, k)
-            xs = list(range(len(LEVELS)))
-            plot_lines(ax, {"jpa": xs, "mongo": xs}, ys, fmt="{:.0f}%")
-            ax.set_ylim(0, 118)
+def grouped_bars(ax, groups, series_order, value, err=None, fmt="{:.0f}", ylabel=""):
+    """groups: [(组名, {impl: 数值})]；err: [(组名, {impl: (低, 高)})]；每组内按 series_order 排列。"""
+    width = 0.24
+    for gi, (gname, vals) in enumerate(groups):
+        present = [s for s in series_order if s in vals and vals[s] is not None]
+        offset0 = -(len(present) - 1) * width / 2
+        for si, impl in enumerate(present):
+            x = gi + offset0 + si * width
+            v = vals[impl]
+            ax.bar(x, v, width=width, color=SERIES[impl], edgecolor=SURFACE, linewidth=2,
+                   label=LABEL[impl], zorder=3)
+            top = v
+            if err:
+                lo, hi = err[gi][1].get(impl, (v, v))
+                ax.plot([x, x], [lo, hi], color=INK2, lw=1.2, zorder=4)
+                ax.plot([x - 0.04, x + 0.04], [hi, hi], color=INK2, lw=1.2, zorder=4)
+                ax.plot([x - 0.04, x + 0.04], [lo, lo], color=INK2, lw=1.2, zorder=4)
+                top = max(hi, v)
+            ax.annotate(fmt.format(v), (x, top), xytext=(0, 3), textcoords="offset points",
+                        ha="center", va="bottom", fontsize=8.5, color=INK2)
+    ax.set_xticks(range(len(groups)))
+    ax.set_xticklabels([g for g, _ in groups])
+    ax.tick_params(length=0)
+    ax.set_ylabel(ylabel)
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.12)
+
+
+OPN = {"read": "查询", "write": "写入"}
+
+
+def main_comparison(stats, out):
+    """主对比：查询 50 线程、写入 100 线程（含 MongoDB j:true 写入），统计第 60～240 秒。"""
+    by = {(r["op"], r["impl"]): r for r in rows(os.path.join(stats, "jtl-summary-n1.csv")) if r["phase"] == "main"}
+    if not by:
+        return
+    ops = [("read", "查询（50 线程）"), ("write", "写入（100 线程）")]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.9))
+    panels = (("steady_throughput", "吞吐量", "次/秒", "{:,.0f}"), ("steady_p95_ms", "P95 响应时间", "毫秒", "{:.0f}"),
+              ("steady_p99_ms", "P99 响应时间", "毫秒", "{:.0f}"))
+    for ax, (key, title, unit, fmt) in zip(axes, panels):
+        groups = [(name, {i: float(by[(op, i)][key]) for i in ("jpa", "mongo", "mongoj") if (op, i) in by}) for op, name in ops]
+        grouped_bars(ax, groups, ["jpa", "mongo", "mongoj"], key, None, fmt, unit)
+        ax.set_title(title, loc="left", fontsize=10)
+    legend_top(fig, axes)
+    fig.suptitle("主对比：查询 50 线程、写入 100 线程（统计第 60～240 秒）", x=0.01, y=1.14, ha="left",
+                 fontsize=13, fontweight="bold", color=INK)
+    fig.tight_layout(w_pad=2.5)
+    save(fig, out, "main-comparison.png")
+
+
+def main_resources(stats, out):
+    """主对比的资源开销：CPU 使用率取记录规则 node:cpu_usage_percent（2 秒平均）在统计区间内的均值。"""
+    prom = [x for x in rows(os.path.join(stats, "prom-summary-n1.csv")) if x["phase"] == "main"]
+    if not prom or not prom[0].get("CDWY1_cpu2s_avg"):
+        return
+    val = {}
+    for x in prom:
+        db = "CDWY2" if x["impl"] == "jpa" else "CDWY5"
+        val[(x["op"], x["impl"], "app")] = float(x["CDWY1_cpu2s_avg"])
+        val[(x["op"], x["impl"], "db")] = float(x[db + "_cpu2s_avg"])
+        val[(x["op"], x["impl"], "iops")] = float(x[db + "_disk_write_iops"])
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.9))
+    panels = (("app", "应用服务器 CPU 使用率", "%", "{:.0f}%", ("read", "write")),
+              ("db", "数据库服务器 CPU 使用率", "%", "{:.0f}%", ("read", "write")),
+              ("iops", "写入时数据库服务器每秒写盘次数", "次/秒", "{:,.0f}", ("write",)))
+    for ax, (kind, title, unit, fmt, ops) in zip(axes, panels):
+        groups = [(OPN[op], {i: val.get((op, i, kind)) for i in ("jpa", "mongo", "mongoj")}) for op in ops]
+        grouped_bars(ax, groups, ["jpa", "mongo", "mongoj"], kind, None, fmt, unit)
+        if kind != "iops":
+            ax.set_ylim(0, 115)
             ax.set_yticks([0, 25, 50, 75, 100])
-            ax.set_title("%s · %s" % (op_name, name), loc="left", fontsize=10)
-            if c_i == 0:
-                ax.set_ylabel("CPU 使用率（%）")
-            style_levels(ax)
-    h, l = axes[0][0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.04), fontsize=9.5, labelcolor=INK)
-    fig.tight_layout(h_pad=2.5, w_pad=2)
-    save(fig, out_dir, "cpu-overview.png")
+        ax.set_title(title, loc="left", fontsize=10)
+    legend_top(fig, axes)
+    fig.suptitle("主对比的资源开销（CPU 使用率为 2 秒平均在统计区间内的均值）", x=0.01, y=1.14, ha="left",
+                 fontsize=13, fontweight="bold", color=INK)
+    fig.tight_layout(w_pad=2.5)
+    save(fig, out, "main-resources.png")
 
 
-def disk_chart(prom, out_dir):
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.9))
-    for ax, (suffix, title, unit, fmt) in zip(axes, (("disk_write_iops", "数据库服务器磁盘写入次数", "次/秒", "{:.0f}"),
-                                                   ("disk_write_mb_s", "数据库服务器磁盘写入量", "MB/秒", "{:.1f}"))):
-        ys = {impl: level_series(prom, "write", impl, ("CDWY2_" if impl == "jpa" else "CDWY5_") + suffix)
-              for impl in ("jpa", "mongo")}
-        xs = list(range(len(LEVELS)))
-        plot_lines(ax, {"jpa": xs, "mongo": xs}, ys, fmt=fmt)
-        ax.set_ylim(bottom=0)
-        ax.set_ylim(top=ax.get_ylim()[1] * 1.18)
-        ax.set_title(title, loc="left")
-        ax.set_ylabel(unit)
-        style_levels(ax)
-    h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.06), fontsize=9.5, labelcolor=INK)
-    fig.suptitle("写入测试：数据库服务器的磁盘写入", x=0.01, y=1.13, ha="left", fontsize=13, fontweight="bold", color=INK)
-    fig.tight_layout(w_pad=3)
-    save(fig, out_dir, "write-disk.png")
+def probe(stats, out):
+    """最多同时运行线程数逐级加压：吞吐量与平均响应时间随线程数的变化。
+    未通过的级别没有“全部线程都在运行”的时段，不画点，在横轴上标出。"""
+    data = {(r["op"], r["impl"], int(r["threads"])): r
+            for r in rows(os.path.join(stats, "jtl-summary-probe.csv")) if r["phase"] == "probe"}
+    if not data:
+        return
+    levels = [400, 800, 1200, 1600, 2000]
+    ok = lambda r: r["steady_throughput"] not in ("", "nan")
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7.0))
+    for ri, op in enumerate(("read", "write")):
+        d = {(i, t): r for (o, i, t), r in data.items() if o == op}
+        level_lines(axes[ri][0], d, levels, "steady_throughput", "%s：吞吐量" % OPN[op], "次/秒", "{:,.0f}")
+        level_lines(axes[ri][1], d, levels, "steady_avg_ms", "%s：平均响应时间" % OPN[op], "毫秒")
+        for ax in axes[ri]:
+            ax.set_xlabel("JMeter 线程数")
+            for (i, t), r in sorted(d.items()):
+                if not ok(r):
+                    x = levels.index(t)
+                    ax.plot([x], [0], marker="x", ms=9, mew=2, color=SERIES[i], clip_on=False, zorder=4)
+                    ax.annotate("%s 未通过" % SHORT[i], (x, 0), xytext=(0, 9), textcoords="offset points",
+                                ha="center", va="bottom", fontsize=8.5, color=INK2)
+    legend_top(fig, [axes[1][0]], ncol=2, y=1.04)
+    fig.suptitle("最多同时运行线程数：逐级加压（全部线程同时运行的时段；× 为未通过的级别）", x=0.01, y=1.09, ha="left",
+                 fontsize=13, fontweight="bold", color=INK)
+    fig.tight_layout(h_pad=2.5, w_pad=3)
+    save(fig, out, "probe.png")
 
 
-def per_second(run_dir):
-    """JTL → 每秒请求数和平均响应时间（按样本时间戳取整到秒）。"""
-    cnt = defaultdict(int)
-    tot = defaultdict(int)
-    t0 = None
-    path = os.path.join(run_dir, "samples.jtl")
-    f = open(path, newline="", encoding="utf-8") if os.path.exists(path) else gzip.open(path + ".gz", "rt", newline="", encoding="utf-8")
-    with f:
-        for row in csv.DictReader(f):
-            ts = int(row["timeStamp"])
-            t0 = ts if t0 is None else min(t0, ts)
-            sec = ts // 1000
-            cnt[sec] += 1
-            tot[sec] += int(row["elapsed"])
-    base = t0 // 1000
-    secs = sorted(cnt)
-    return [s - base for s in secs], [cnt[s] for s in secs], [tot[s] / cnt[s] for s in secs]
-
-
-def stress_timeline(round_dir, op, out_dir, op_title):
-    """400 线程压力测试与紧接着的 10 线程恢复检查：每秒请求数与平均响应时间。两次测试分段绘制，中间的冷却间隔留空。"""
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.9))
-    gap = 20  # 两次测试之间的冷却时间（秒），图上留出同样的空白
-    seg_spans = []
+def level_lines(ax, data, levels, key, title, unit, fmt="{:.0f}"):
+    xs = list(range(len(levels)))
+    ends = {}
     for impl in ("jpa", "mongo"):
-        offset = 0
-        for i, (phase, t) in enumerate((("stress", 400), ("recovery", 10))):
-            run_dir = os.path.join(round_dir, "%s-%s-%s-t%d" % (impl, op, phase, t))
-            if not any(os.path.exists(os.path.join(run_dir, n)) for n in ("samples.jtl", "samples.jtl.gz")):
+        ys = [data.get((impl, t), {}).get(key) for t in levels]
+        pts = [(x, float(y)) for x, y in zip(xs, ys) if y not in (None, "", "nan") and float(y) == float(y)]
+        if not pts:
+            continue
+        px, py = zip(*pts)
+        ax.plot(px, py, color=SERIES[impl], lw=2, marker="o", ms=8, mfc=SERIES[impl], mec=SURFACE, mew=2,
+                label=LABEL[impl], zorder=3)
+        ends[impl] = (px[-1], py[-1])
+    ax.set_xticks(xs)
+    ax.set_xticklabels([str(t) for t in levels])
+    ax.tick_params(length=0)
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
+    ax.set_title(title, loc="left", fontsize=10)
+    ax.set_ylabel(unit)
+    y0, y1 = ax.get_ylim()
+    if len(ends) < 2 or abs(ends["jpa"][1] - ends["mongo"][1]) >= 0.07 * (y1 - y0):
+        for impl, (x, y) in ends.items():
+            ax.annotate(SHORT[impl] + " " + fmt.format(y), (x, y), xytext=(6, 0), textcoords="offset points",
+                        va="center", fontsize=8.5, color=INK2)
+
+
+def maxload_cpu(stats, out):
+    """最多线程数下持续压测时各服务器的 CPU 使用率曲线（记录规则 node:cpu_usage_percent，2 秒平均）。
+    每个面板一种实现（颜色同其他图：MySQL 蓝、MongoDB 橙），服务器用线型区分并在线尾直接标注。"""
+    import json
+    base = os.path.join(os.path.dirname(os.path.normpath(stats)), "x1")
+    if not os.path.isdir(base):
+        return
+    runs = {}
+    for d in sorted(os.listdir(base)):
+        m = __import__("re").match(r"^(jpa|mongo)-(read|write)-maxload-t(\d+)$", d)
+        p = os.path.join(base, d, "monitor.json")
+        if m and os.path.exists(p):
+            runs[(m.group(2), m.group(1))] = (int(m.group(3)), json.load(open(p, encoding="utf-8")))
+    if not runs:
+        return
+    fig, axes = plt.subplots(2, 2, figsize=(11, 6.6), sharey=True)
+    for ri, op in enumerate(("read", "write")):
+        for ci, impl in enumerate(("jpa", "mongo")):
+            ax = axes[ri][ci]
+            if (op, impl) not in runs:
+                ax.set_visible(False)
                 continue
-            xs, tps, lat = per_second(run_dir)
-            # 去掉首尾两个不满一秒的点，避免出现假的骤降
-            xs, tps, lat = xs[1:-1], tps[1:-1], lat[1:-1]
-            xs = [x + offset for x in xs]
-            for ax, ys in ((axes[0], tps), (axes[1], lat)):
-                ax.plot(xs, ys, color=SERIES[impl], lw=1.6, solid_joinstyle="round",
-                        label=LABEL[impl] if i == 0 else None)
-            if impl == "jpa":
-                seg_spans.append((xs[0], xs[-1], "400 线程压力测试" if phase == "stress" else "10 线程恢复检查"))
-            offset = xs[-1] + gap
-    axes[0].set_title("每秒完成的请求数", loc="left")
-    axes[0].set_ylabel("次/秒")
-    axes[1].set_title("每秒平均响应时间", loc="left")
-    axes[1].set_ylabel("毫秒")
-    for ax in axes:
-        ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
-        tr = ax.get_xaxis_transform()
-        for x0, x1, name in seg_spans:
-            ax.text((x0 + x1) / 2, 0.97, name, transform=tr, ha="center", va="top", color=MUTED, fontsize=9)
-        ax.set_xlabel("时间（秒）")
-        ax.tick_params(length=0)
-    h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.06), fontsize=9.5, labelcolor=INK)
-    fig.suptitle(op_title, x=0.01, y=1.13, ha="left", fontsize=13, fontweight="bold", color=INK)
-    fig.tight_layout(w_pad=3)
-    save(fig, out_dir, "%s-stress-recovery.png" % op)
+            t, mon = runs[(op, impl)]
+            t0 = mon["window_utc_ms"][0]
+            s0, s1 = [(x - t0) / 1000.0 for x in mon["steady_utc_ms"]]
+            ax.axvspan(s0, s1, color=GRID, alpha=0.45, lw=0, zorder=0)
+            ax.text((s0 + s1) / 2, 104, "统计区间", ha="center", va="bottom", fontsize=8, color=MUTED)
+            db = "CDWY2" if impl == "jpa" else "CDWY5"
+            lines = (("CDWY1_cpu2s_pct", "应用服务器", SERIES[impl], "-"),
+                     (db + "_cpu2s_pct", "数据库服务器", SERIES[impl], "--"),
+                     ("CDWY3_cpu2s_pct", "压测机", MUTED, ":"))
+            for key, name, color, style in lines:
+                pts = mon["series"].get(key) or []
+                if not pts:
+                    continue
+                xs = [(p[0] - t0) / 1000.0 for p in pts]
+                ys = [p[1] for p in pts]
+                ax.plot(xs, ys, color=color, lw=2 if style != ":" else 1.6, ls=style, label=name, zorder=3)
+                ax.annotate(name, (xs[-1], ys[-1]), xytext=(5, 0), textcoords="offset points", va="center",
+                            fontsize=8.5, color=INK2)
+            ax.set_ylim(0, 112)
+            ax.set_yticks([0, 25, 50, 75, 100])
+            ax.set_xlim(0, max(260, s1 + 20))
+            ax.set_title("%s %s：%d 线程" % (SHORT[impl], "查询" if op == "read" else "写入", t), loc="left", fontsize=10)
+            if ci == 0:
+                ax.set_ylabel("CPU 使用率（%）")
+            if ri == 1:
+                ax.set_xlabel("测试开始后的秒数")
+            ax.grid(True, axis="y")
+    handles = [plt.Line2D([], [], color=INK2, lw=2, ls="-", label="应用服务器（CDWY1）"),
+               plt.Line2D([], [], color=INK2, lw=2, ls="--", label="数据库服务器（MySQL 为 CDWY2，MongoDB 为 CDWY5）"),
+               plt.Line2D([], [], color=MUTED, lw=1.6, ls=":", label="压测机（CDWY3）")]
+    fig.legend(handles=handles, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.03), fontsize=9.5, labelcolor=INK)
+    fig.suptitle("最多线程数下持续压测：各服务器 CPU 使用率（2 秒平均，颜色区分实现：MySQL 蓝、MongoDB 橙）", x=0.01, y=1.08,
+                 ha="left", fontsize=12.5, fontweight="bold", color=INK)
+    fig.tight_layout(h_pad=2.2, w_pad=3)
+    save(fig, out, "maxload-cpu.png")
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("stats_dir")
-    p.add_argument("round_dir")
-    p.add_argument("--name", required=True)
     args = p.parse_args()
     out = os.path.join(args.stats_dir, "charts")
-    jtl = read_csv(os.path.join(args.stats_dir, "jtl-summary-%s.csv" % args.name))
-    overview(jtl, "read", out, "查询 GET /api/logs：负载与压力测试")
-    overview(jtl, "write", out, "写入 POST /api/logs：负载与压力测试")
-    prom_path = os.path.join(args.stats_dir, "prom-summary-%s.csv" % args.name)
-    if os.path.exists(prom_path):
-        prom = read_csv(prom_path)
-        cpu_overview(prom, out)
-        disk_chart(prom, out)
-    stress_timeline(args.round_dir, "read", out, "查询：400 线程压力测试与恢复")
-    stress_timeline(args.round_dir, "write", out, "写入：400 线程压力测试与恢复")
+    main_comparison(args.stats_dir, out)
+    main_resources(args.stats_dir, out)
+    probe(args.stats_dir, out)
+    maxload_cpu(args.stats_dir, out)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """实验四 JTL 统计：每次测试一行，输出 CSV 和 Markdown 表。
 
-目录约定（run-suite.sh 生成）：<轮次目录>/<实现>-<读写>-<阶段>-t<线程数>/samples.jtl(.gz)、params.txt、
+目录约定（deploy/scripts/run-suite-v3.sh 生成）：<轮次目录>/<实现>-<读写>-<阶段>-t<线程数>/samples.jtl(.gz)、params.txt、
 db-rows.txt（写测试）。
 
 统计区间（列名前缀 steady_）：
