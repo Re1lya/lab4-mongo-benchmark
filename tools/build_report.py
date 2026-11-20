@@ -81,10 +81,14 @@ def html_reports():
 
 
 def jmeter_figs(add, CHARTS, items, first):
-    """JMeter HTML 报告的截图（tools/jmeter_html_shots.py 生成），按 items 顺序编号。"""
-    for k, (group, name, text) in enumerate(items):
+    """JMeter HTML 报告截图（tools/jmeter_html_shots.py 生成）：每项测试两张，首页 Dashboard 与 Response Time Percentiles。"""
+    k = first
+    for group, name, text in items:
         add(("figure", os.path.join(CHARTS, "jmeter-%s-%s.png" % (group, name)),
-             "图%d  JMeter HTML 报告：%s（results/jmeter-html/%s/%s）" % (first + k, text, group, name), 15.0))
+             "图%d  JMeter 报告：%s（results/jmeter-html/%s/%s）" % (k, text, group, name), 14.5))
+        add(("figure", os.path.join(CHARTS, "jmeter-%s-%s-percentiles.png" % (group, name)),
+             "图%d  Response Time Percentiles：%s" % (k + 1, text), 14.5))
+        k += 2
 
 
 def build():
@@ -265,14 +269,14 @@ def build():
                "MongoDB 版 %s～%s 次/秒，与主对比的写入吞吐量相差不超过 %.0f%%（5.4 节），两种实现的差距在各次测试中保持一致。"
                % (n(min(qw["jpa"])), n(max(qw["jpa"])), n(min(qw["mongo"])), n(max(qw["mongo"])), qdev + 0.5)))
 
-    add(("p", "图 2～图 5 是 JMeter 报告生成器对这四项测试生成的 HTML 报告的统计表（只含第 60～240 秒内开始的请求），"
+    add(("p", "图 2～图 9 是 JMeter 报告生成器对这四项测试生成的 HTML 报告：每项一张首页（测试信息、APDEX、请求成功率和统计表）和一张响应时间百分位曲线（只含第 60～240 秒内开始的请求），"
                "样本数、平均与百分位响应时间与表 6 一致；吞吐量按首尾请求的实际时间跨度计算，与表 6 相差不到 0.1%。"
                "Sent 为 0 是因为 JTL 没有保存发送字节数。"))
     jmeter_figs(add, CHARTS, [("n1", "jpa-read-main-t50", "MySQL 查询 50 线程"), ("n1", "mongo-read-main-t50", "MongoDB 查询 50 线程"),
                               ("n1", "jpa-write-main-t100", "MySQL 写入 100 线程"), ("n1", "mongo-write-main-t100", "MongoDB 写入 100 线程")], 2)
 
     add(("h2", "5.2 资源使用与瓶颈"))
-    add(("figure", os.path.join(CHARTS, "main-resources.png"), "图6  主对比的资源开销（CPU 使用率为 2 秒平均）", 15.4))
+    add(("figure", os.path.join(CHARTS, "main-resources.png"), "图10  主对比的资源开销（CPU 使用率为 2 秒平均）", 15.4))
     rows = []
     for op in ("read", "write"):
         for impl in ("jpa", "mongo", "mongoj"):
@@ -319,20 +323,20 @@ def build():
                % (n(npm(*wm, "CDWY5_disk_write_iops")), n(npm(*wjj, "CDWY5_disk_write_iops")), kb_insert_n("mongo"), kb_insert_n("mongoj"),
                   npm(*wm, "CDWY1_cpu2s_avg"), npm(*wjj, "CDWY1_cpu2s_avg"), per_op, 100 - pct(nj(*wjj), nj(*wm)))))
 
-    add(("p", "图 7 是 j:true 这项测试的 HTML 报告统计表（第 60～240 秒）。"))
-    jmeter_figs(add, CHARTS, [("n1", "mongoj-write-main-t100", "MongoDB j:true 写入 100 线程")], 7)
+    add(("p", "图 11、图 12 是 j:true 这项测试的 HTML 报告首页与响应时间百分位曲线（第 60～240 秒）。"))
+    jmeter_figs(add, CHARTS, [("n1", "mongoj-write-main-t100", "MongoDB j:true 写入 100 线程")], 11)
 
     add(("h2", "5.4 最多同时运行线程数"))
-    add(("figure", os.path.join(CHARTS, "probe.png"), "图8  最多同时运行线程数：逐级加压的吞吐量与平均响应时间", 15.0))
+    add(("figure", os.path.join(CHARTS, "probe.png"), "图13  最多同时运行线程数：逐级加压的吞吐量与平均响应时间", 15.0))
     B.extend(probe_section(PR, QJ, QP, XJ, XP, NMAX))
 
     add(("h2", "5.5 最多线程数下持续压测"))
-    add(("figure", os.path.join(CHARTS, "maxload-cpu.png"), "图9  最多线程数下持续压测：各服务器 CPU 使用率（2 秒平均）", 15.2))
+    add(("figure", os.path.join(CHARTS, "maxload-cpu.png"), "图14  最多线程数下持续压测：各服务器 CPU 使用率（2 秒平均）", 15.2))
     B.extend(maxload_section(XJ, XP, NJ, NP, NMAX))
-    add(("p", "图 10～图 13 是这四项持续压测的 HTML 报告统计表（第 60～240 秒）。高并发下单个请求耗时接近 1 秒，JMeter 按首尾请求"
+    add(("p", "图 15～图 22 是这四项持续压测的 HTML 报告首页与响应时间百分位曲线（第 60～240 秒）。高并发下单个请求耗时接近 1 秒，JMeter 按首尾请求"
                "的实际时间跨度计算的吞吐量比表 9 低 0.2%～0.5%，其余数字一致。"))
     jmeter_figs(add, CHARTS, [("x1", "jpa-read-maxload-t400", "MySQL 查询 400 线程"), ("x1", "mongo-read-maxload-t400", "MongoDB 查询 400 线程"),
-                              ("x1", "jpa-write-maxload-t2000", "MySQL 写入 2000 线程"), ("x1", "mongo-write-maxload-t2000", "MongoDB 写入 2000 线程")], 10)
+                              ("x1", "jpa-write-maxload-t2000", "MySQL 写入 2000 线程"), ("x1", "mongo-write-maxload-t2000", "MongoDB 写入 2000 线程")], 15)
 
     # 6
     add(("h1", "6 结论"))
@@ -486,7 +490,7 @@ def maxload_section(XJ, XP, NJ, NP, NMAX):
                         x("read", "mongo", "steady_throughput") / x("read", "jpa", "steady_throughput"),
                         x("write", "mongo", "steady_throughput") / x("write", "jpa", "steady_throughput"))))
     hot = [xp("read", "jpa", "CDWY1_cpu2s_avg"), xp("read", "mongo", "CDWY1_cpu2s_avg"), xp("write", "mongo", "CDWY1_cpu2s_avg")]
-    out.append(("p", "图 9 为 2 秒平均的 CPU 使用率曲线。四组测试中负载最高的都是应用服务器 CDWY1：MySQL 查询、MongoDB 查询和 MongoDB 写入时"
+    out.append(("p", "图 14 为 2 秒平均的 CPU 使用率曲线。四组测试中负载最高的都是应用服务器 CDWY1：MySQL 查询、MongoDB 查询和 MongoDB 写入时"
                      "在统计区间内平均为 %s，MySQL 写入时为 %.0f%%，同时 MySQL 服务器为 %.0f%%、iowait %.0f%%。与 50 线程时相比，MySQL 查询的"
                      "饱和位置发生了变化：数据库服务器 CPU 由 %.0f%% 降到 %.0f%%，应用服务器由 %.0f%% 升到 %.0f%%，每请求应用端 CPU 时间由 %.2f ms "
                      "增至 %.2f ms，垃圾回收停顿占比由 %.1f%% 升至 %.1f%%。高并发下应用端每个请求的开销增加成为限制，吞吐量因此比 50 线程时低 %.0f%%。"

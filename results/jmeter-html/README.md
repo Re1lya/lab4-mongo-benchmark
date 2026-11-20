@@ -16,7 +16,7 @@ GitHub、Gitee 的网页不会直接显示这些页面：下载或克隆仓库�
 - JTL 为了减小体积没有保存 threadName、responseMessage、sentBytes 等列。生成时只在临时副本里补上 threadName（“查询线程组 1-1”或“写入线程组 1-1”，活跃线程数曲线的数值来自 grpThreads）和 responseMessage（按状态码填 OK/Created），原始 JTL 未改动。JTL 没有发送字节数，所以 Sent KB/sec 显示为 0。
 - 完整的原始数据（含升压和降压）见各测试目录的 `samples.jtl.gz`。
 
-报告中引用的截图（页面标题 + Statistics 表）由 `python3 tools/jmeter_html_shots.py` 生成，存为 `results/统计与图表/charts/jmeter-<组>-<测试名>.png`（需要 Google Chrome）。
+报告中引用的截图由 `python3 tools/jmeter_html_shots.py` 生成（需要 Google Chrome）：首页 Dashboard 存为 `results/统计与图表/charts/jmeter-<组>-<测试名>.png`，Response Time Percentiles 图存为 `jmeter-<组>-<测试名>-percentiles.png`。
 
 ## 重新生成
 
