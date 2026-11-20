@@ -36,7 +36,7 @@
 | --- | --- |
 | `jtl-summary-<组>.csv` / `.md` | 每次测试的样本数、错误数、区间吞吐量、平均/P50/P90/P95/P99/最大响应时间、入库核对；另有同时运行线程数最大值 `max_threads`、平均响应大小 `bytes_avg`、压测机自检 `client_gap_ms` |
 | `prom-summary-<组>.csv` | 每次测试统计区间内的各服务器 CPU（`CDWYx_cpu2s_avg`/`_max` 为 2 秒平均 CPU 的均值与最大值）、iowait、内存、数据库磁盘写入、JVM 与连接池、服务端每秒请求数、每请求 CPU 时间。逐级加压中未通过的级别没有“全部线程都在运行”的时段，按整次测试统计，`window` 列为 `full-run` |
-| `charts/*.png` | 报告中的图：`main-comparison`（主对比）、`main-resources`（主对比的资源开销）、`probe`（逐级加压）、`maxload-cpu`（持续压测时的 CPU 曲线） |
+| `charts/*.png` | 报告中的图：`main-comparison`（主对比）、`main-resources`（主对比的资源开销）、`probe`（逐级加压）、`maxload-cpu`（持续压测时的 CPU 曲线）、`jmeter-<组>-<测试名>`（9 份 JMeter HTML 报告的统计表截图，`tools/jmeter_html_shots.py` 生成） |
 
 ## 重新计算
 
